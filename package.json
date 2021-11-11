@@ -1,0 +1,17 @@
+{
+  "name": "symbolic",
+  "version": "1.0.0",
+  "description": "A mathematica library",
+  "main": "index.js",
+  "scripts": {
+    "test": "test",
+    "build": "gulp build"
+  },
+  "author": "philippica (Yuanjie Pu)",
+  "license": "BSD-2-Clause",
+  "dependencies": {},
+  "devDependencies": {
+    "gulp": "^4.0.2",
+    "gulp-uglify": "^3.0.2"
+  }
+}
