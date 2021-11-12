@@ -1,4 +1,4 @@
-class BigInteger {
+export class BigInteger {
   static _base = 10;
   // In rowDec, there's a _base^compressDegree base number
   static compressDegree = 4;
