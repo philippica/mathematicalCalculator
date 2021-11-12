@@ -1,11 +1,3 @@
-/* eslint-disable no-plusplus */
-/* eslint-disable prefer-destructuring */
-/* eslint-disable no-tabs */
-/* eslint-disable no-useless-escape */
-/* eslint-disable no-unused-vars */
-
-
-/* eslint-disable consistent-return */
 const LEX_STATE = {
   VACANT: 0,
   RECEIVED_FUNC: 1,
