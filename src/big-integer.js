@@ -1,4 +1,4 @@
-export class BigInteger {
+class BigInteger {
   static _base = 10;
   // In rowDec, there's a _base^compressDegree base number
   static compressDegree = 4;
@@ -99,7 +99,7 @@ export class BigInteger {
     for (let i = 0; i < selfArray.length || i < anotherArray.length; i++) {
       const segmentSelf = selfArray[i] ?? 0;
       const segmentAnother = anotherArray[i] ?? 0;
-      const segmentResult = op(segmentSelf, segmentAnother, carry) % BigInteger.realBase;
+      const segmentResult = (op(segmentSelf, segmentAnother, carry) + BigInteger.realBase) % BigInteger.realBase;
       result.push(segmentResult);
       carry = nextCarry(op(segmentSelf, segmentAnother, carry));
     }
@@ -109,11 +109,20 @@ export class BigInteger {
   add(_num) {
     return this.linearOp(_num, (first, second, carry) => first + second + carry, num => (num >= BigInteger.realBase ? 1 : 0));
   }
+  isZero() {
+    for(let digit of this.rawDec) {
+      if(digit != 0)return false;
+    }
+    return true;
+  }
   minus(_num) {
     const isSwap = !this.largerThan(_num);
     const result = this.linearOp(_num, (first, second, carry) => first - second - carry, num => (num < 0 ? 1 : 0), isSwap);
     if (isSwap) {
       result.inverse();
+    }
+    while(result.rawDec[result.rawDec.length - 1] === 0 && result.rawDec.length > 1) {
+      result.rawDec.pop();
     }
     return result;
   }
@@ -142,6 +151,39 @@ export class BigInteger {
     }
     return new BigInteger(result);
   }
+  devide(_num) {
+    let num = _num;
+    if (typeof (_num) === 'number' || typeof (_num) === 'string') {
+      num = new BigInteger(_num);
+    }
+    let start = this.rawDec.length - num.rawDec.length;
+    if(start < 0) {
+      return new BigInteger(0);
+    }
+    let a = new BigInteger(this.rawDec.slice(start))
+    let ans = '';
+    for(let i = start; i >= 0; i--) {
+      let ansDigit = 0;
+      while(true) {
+        const b = a.minus(_num);
+        console.info(b.toString());
+        if(!b.positive && !b.isZero()) {
+          break;
+        }
+        ansDigit ++;
+        a = b;
+      }
+      ans += ansDigit.toString();
+      a.rawDec.unshift(0)
+      if(i > 0) {
+        a.rawDec[0] = this.rawDec[i - 1];
+      }
+      while(a.rawDec[a.rawDec.length - 1] === 0 && a.rawDec.length > 1) {
+        a.rawDec.pop();
+      }
+    }
+    return new BigInteger(ans);
+  }
   largerThan(_num) {
     let num = _num;
     if (typeof (_num) === 'number' || typeof (_num) === 'string') {
@@ -150,7 +192,7 @@ export class BigInteger {
     if (num.rawDec.length !== this.rawDec.length) {
       return (this.rawDec.length > num.rawDec.length);
     }
-    for (let i = num.rawDec.length; i >= 0; i--) {
+    for (let i = num.rawDec.length-1; i >= 0; i--) {
       if (this.rawDec[i] !== num.rawDec[i]) {
         return this.rawDec[i] > num.rawDec[i];
       }
@@ -158,3 +200,7 @@ export class BigInteger {
     return false;
   }
 }
+
+
+a = new BigInteger("123212")
+//console.info(a.devide(2));
