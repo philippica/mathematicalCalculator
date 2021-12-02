@@ -1,14 +1,3 @@
-/* eslint-disable no-param-reassign */
-/* eslint-disable no-bitwise */
-/* eslint-disable no-mixed-operators */
-/* eslint-disable no-underscore-dangle */
-/* eslint-disable no-plusplus */
-/* eslint-disable prefer-destructuring */
-/* eslint-disable no-tabs */
-/* eslint-disable no-useless-escape */
-/* eslint-disable no-unused-vars */
-
-/* eslint-disable consistent-return */
 
 class BigInteger {
   static _base = 10;
