@@ -301,7 +301,7 @@ class ParseResult {
 
 class ASTNode {
   constructor(type, childNode, value) {
-    this.symbols = new Map();
+    this.symbols = new Set();
     this.child = childNode;
     this.value = value;
     this.type = type;
@@ -362,6 +362,7 @@ class SymbolASTNode extends ASTNode {
   constructor(symbolName) {
     super('symbol');
     this.symbolName = symbolName;
+    this.symbols.add(symbolName);
   }
   compute() {
     const ret = this.clone();
@@ -379,6 +380,243 @@ class SymbolASTNode extends ASTNode {
       result = new IntegerASTNode('1');
     } else {
       result = new IntegerASTNode('0');
+    }
+    return result;
+  }
+}
+
+
+class UnaryASTNode extends ASTNode {
+  constructor(type, child) {
+    super(type, child, null);
+  }
+  compute() {
+    const temp = this.child.compute();
+    const ret = new UnaryASTNode(this.type, temp);
+    for (const element of temp.symbols) {
+      ret.symbols.add(element);
+    }
+    return ret;
+  }
+  toString() {
+    const temp = this.child.toString();
+    if (this.type === 'positive') {
+      return `+${temp}`;
+    } else if (this.type === 'negative') {
+      return `(-${temp})`;
+    }
+  }
+  clone() {
+    return new UnaryASTNode(this.type, this.child.clone());
+  }
+  derivative(symbol) {
+    return new UnaryASTNode(this.type, this.child.derivative(symbol));
+  }
+}
+
+
+class TermASTNode extends ASTNode {
+  constructor(value) {
+    super('term', []);
+    if (value) {
+      this.add('add', value);
+    }
+  }
+  add(type, value) {
+    this.child.push({ type, value });
+  }
+  getSimplify() {
+    this.child = this.child?.filter((child) => {
+      if (child.value.type === 'integer') {
+        return !child.value?.value?.isZero();
+      }
+      return true;
+    });
+    if (this.child.length === 1) {
+      return this.child[0].value;
+    }
+    if (this.child.length === 0) {
+      return new IntegerASTNode('0').compute();
+    }
+    return this;
+  }
+  compute() {
+    const ret = new TermASTNode();
+    const addList = this.child.filter(x => x.type === 'add').map(x => x.value.compute());
+    const minusList = this.child.filter(x => x.type === 'minus').map(x => x.value.compute());
+
+    const incomputableMinusList = minusList.filter(x => x.type !== 'integer');
+    const integerMinus = minusList.filter(x => x.type === 'integer').reduce((x, y) => {
+      const result = x.value.add(y.value);
+      const _ret = new IntegerASTNode(result.toString());
+      _ret.value = result;
+      return _ret;
+    }, new IntegerASTNode('0').compute());
+
+    integerMinus.value.positive = !integerMinus.value.positive;
+
+    const incomputableAddList = addList.filter(x => x.type !== 'integer');
+    const integerAdd = addList.filter(x => x.type === 'integer').reduce((x, y) => {
+      const result = x.value.add(y.value);
+      const _ret = new IntegerASTNode(result.toString());
+      _ret.value = result;
+      return _ret;
+    }, integerMinus);
+
+    ret.add('add', integerAdd);
+    incomputableAddList.forEach((x) => {
+      for (const element of x.symbols) {
+        ret.symbols.add(element);
+      }
+      ret.add('add', x);
+    });
+
+    incomputableMinusList.forEach((x) => {
+      for (const element of x.symbols) {
+        ret.symbols.add(element);
+      }
+      ret.add('minus', x);
+    });
+    return ret.getSimplify();
+  }
+  toString() {
+    let result = this.child[0].value.toString();
+    for (let i = 1; i < this.child.length; i++) {
+      const another = this.child[i].value.toString();
+      switch (this.child[i].type) {
+        case 'add':
+          result += ` + ${another}`;
+          break;
+        case 'minus':
+          result += ` - ${another}`;
+          break;
+        default:
+          break;
+      }
+    }
+    return `(${result})`;
+  }
+  clone() {
+    const ret = new TermASTNode(this.child[0].value.clone());
+    for (let i = 1; i < this.child.length; i++) {
+      ret.add(this.child[i].type, this.child[i].value.clone());
+    }
+    return ret;
+  }
+  derivative(symbol) {
+    const ret = this.clone();
+    ret.child = ret.child.map((x) => {
+      x.value = x.value.derivative(symbol);
+      return x;
+    });
+    return ret;
+  }
+}
+
+
+class FactorASTNode extends ASTNode {
+  constructor(value) {
+    super('factor', []);
+    if (value) {
+      this.add('multiply', value);
+    }
+  }
+  add(type, value) {
+    this.child.push({ type, value });
+  }
+  getSimplify() {
+    this.child = this.child?.filter((child) => {
+      if (child.value.type === 'integer') {
+        return child.value?.obj !== '1';
+      }
+      return true;
+    });
+    const zero = this.child?.filter((child) => {
+      if (child.value.type === 'integer') {
+        return child.value?.obj === '0';
+      }
+      return false;
+    });
+    if (zero.length > 0) {
+      return new IntegerASTNode('0').compute();
+    }
+    if (this.child.length === 1) {
+      return this.child[0].value;
+    }
+    if (this.child.length === 0) {
+      return new IntegerASTNode('1').compute();
+    }
+    return this;
+  }
+  compute() {
+    const ret = new FactorASTNode();
+    const multiplyList = this.child.filter(x => x.type === 'multiply').map(x => x.value.compute());
+    const divideList = this.child.filter(x => x.type === 'divide').map(x => x.value.compute());
+
+    const incomputableMultiplyList = multiplyList.filter(x => x.type !== 'integer');
+    const integerMultiplyList = multiplyList.filter(x => x.type === 'integer').reduce((x, y) => {
+      const result = x.value.multiply(y.value);
+      const _ret = new IntegerASTNode(result.toString());
+      _ret.value = result;
+      return _ret;
+    }, new IntegerASTNode('1').compute());
+
+    const incomputableDivideList = divideList.filter(x => x.type !== 'integer');
+    const integerDivideList = divideList.filter(x => x.type === 'integer').reduce((x, y) => {
+      const result = x.value.multiply(y.value);
+      const _ret = new IntegerASTNode(result.toString());
+      _ret.value = result;
+      return _ret;
+    }, new IntegerASTNode('1').compute());
+
+    ret.add('multiply', integerMultiplyList);
+    incomputableMultiplyList.forEach((x) => {
+      for (const element of x.symbols) {
+        ret.symbols.add(element);
+      }
+      ret.add('multiply', x);
+    });
+
+    ret.add('divide', integerDivideList);
+    incomputableDivideList.forEach((x) => {
+      for (const element of x.symbols) {
+        ret.symbols.add(element);
+      }
+      ret.add('divide', x);
+    });
+    return ret.getSimplify();
+  }
+  derivative(symbol) {
+    const ret = new TermASTNode();
+    for (let i = 0; i < this.child.length; i++) {
+      const term = this.clone();
+      term.child[i].value = term.child[i].value.derivative(symbol);
+      ret.add('add', term);
+    }
+    return ret;
+  }
+  clone() {
+    const ret = new FactorASTNode(this.child[0].value.clone());
+    for (let i = 1; i < this.child.length; i++) {
+      ret.add(this.child[i].type, this.child[i].value.clone());
+    }
+    return ret;
+  }
+
+  toString() {
+    let result = this.child[0].value.toString();
+    for (let i = 1; i < this.child.length; i++) {
+      const another = this.child[i].value.toString();
+      switch (this.child[i].type) {
+        case 'multiply':
+          result += ` * ${another}`;
+          break;
+        case 'divide':
+          result += ` / ${another}`;
+          break;
+        default:
+          break;
+      }
     }
     return result;
   }
@@ -422,7 +660,14 @@ class ExponentASTNode extends ASTNode {
       }
       return new IntegerASTNode(result.toString());
     }
-    return new ExponentASTNode(base, power).getSimplify();
+    const ret = new ExponentASTNode(base, power).getSimplify();
+    for (const element of base.symbols) {
+      ret.symbols.add(element);
+    }
+    for (const element of power.symbols) {
+      ret.symbols.add(element);
+    }
+    return ret;
   }
 
   toString() {
@@ -433,214 +678,15 @@ class ExponentASTNode extends ASTNode {
   clone() {
     return new ExponentASTNode(this.base, this.power);
   }
-}
-
-class UnaryASTNode extends ASTNode {
-  constructor(type, child) {
-    super(type, child, null);
-  }
-  compute() {
-    const temp = this.child.compute();
-    const ret = new UnaryASTNode(this.type, temp);
-    return ret;
-  }
-  toString() {
-    const temp = this.child.toString();
-    if (this.type === 'positive') {
-      return `+${temp}`;
-    } else if (this.type === 'negative') {
-      return `(-${temp})`;
-    }
-  }
-  clone() {
-    return new UnaryASTNode(this.type, this.child.clone());
-  }
   derivative(symbol) {
-    return new UnaryASTNode(this.type, this.child.derivative(symbol));
-  }
-}
-
-class FactorASTNode extends ASTNode {
-  constructor(value) {
-    super('factor', []);
-    if (value) {
-      this.add('multiply', value);
+    if (!this.power.symbols.has(symbol)) {
+      const result = new FactorASTNode();
+      result.add('multiply', this.power.clone());
+      const minusOne = new TermASTNode(this.power.clone());
+      minusOne.add('minus', new IntegerASTNode('1'));
+      result.add('multiply', new ExponentASTNode(this.base, minusOne));
+      return result;
     }
-  }
-  add(type, value) {
-    this.child.push({ type, value });
-  }
-  getSimplify() {
-    this.child = this.child?.filter((child) => {
-      if (child.value.type === 'integer') {
-        return child.value?.obj !== '1';
-      }
-      return true;
-    });
-    const zero = this.child?.filter((child) => {
-      if (child.value.type === 'integer') {
-        return child.value?.obj === '0';
-      }
-      return false;
-    });
-    if (zero.length > 0) {
-      return new IntegerASTNode('0');
-    }
-    if (this.child.length === 1) {
-      return this.child[0].value;
-    }
-    if (this.child.length === 0) {
-      return new IntegerASTNode('1');
-    }
-    return this;
-  }
-  compute() {
-    const ret = new FactorASTNode();
-    const multiplyList = this.child.filter(x => x.type === 'multiply').map(x => x.value.compute());
-    const divideList = this.child.filter(x => x.type === 'divide').map(x => x.value.compute());
-
-    const incomputableMultiplyList = multiplyList.filter(x => x.type !== 'integer');
-    const integerMultiplyList = multiplyList.filter(x => x.type === 'integer').reduce((x, y) => {
-      const result = x.value.multiply(y.value);
-      const _ret = new IntegerASTNode(result.toString());
-      _ret.value = result;
-      return _ret;
-    }, new IntegerASTNode('1').compute());
-
-    const incomputableDivideList = divideList.filter(x => x.type !== 'integer');
-    const integerDivideList = divideList.filter(x => x.type === 'integer').reduce((x, y) => {
-      const result = x.value.multiply(y.value);
-      const _ret = new IntegerASTNode(result.toString());
-      _ret.value = result;
-      return _ret;
-    }, new IntegerASTNode('1').compute());
-
-    ret.add('multiply', integerMultiplyList);
-    incomputableMultiplyList.forEach((x) => {
-      ret.add('multiply', x);
-    });
-
-    ret.add('divide', integerDivideList);
-    incomputableDivideList.forEach((x) => {
-      ret.add('divide', x);
-    });
-    return ret.getSimplify();
-  }
-  derivative(symbol) {
-    const computedList = this.child.map((x) => {
-      const temp = x.value.derivative(symbol);
-      temp.type = x.type;
-      return temp;
-    });
-  }
-  clone() {
-    const ret = new FactorASTNode(this.child[0].value.clone());
-    for (let i = 1; i < this.child.length; i++) {
-      ret.add(this.child[i].type, this.child[i].value.clone());
-    }
-    return ret;
-  }
-
-  toString() {
-    let result = this.child[0].value.toString();
-    for (let i = 1; i < this.child.length; i++) {
-      const another = this.child[i].value.toString();
-      switch (this.child[i].type) {
-        case 'multiply':
-          result += ` * ${another}`;
-          break;
-        case 'divide':
-          result += ` / ${another}`;
-          break;
-        default:
-          break;
-      }
-    }
-    return result;
-  }
-}
-
-class TermASTNode extends ASTNode {
-  constructor(value) {
-    super('term', []);
-    if (value) {
-      this.add('add', value);
-    }
-  }
-  add(type, value) {
-    this.child.push({ type, value });
-  }
-  getSimplify() {
-    this.child = this.child?.filter((child) => {
-      if (child.value.type === 'integer') {
-        return !child.value?.value?.isZero();
-      }
-      return true;
-    });
-    if (this.child.length === 1) {
-      return this.child[0].value;
-    }
-    if (this.child.length === 0) {
-      return new IntegerASTNode('0');
-    }
-    return this;
-  }
-  compute() {
-    const ret = new TermASTNode();
-    const addList = this.child.filter(x => x.type === 'add').map(x => x.value.compute());
-    const minusList = this.child.filter(x => x.type === 'minus').map(x => x.value.compute());
-
-    const incomputableMinusList = minusList.filter(x => x.type !== 'integer');
-    const integerMinus = minusList.filter(x => x.type === 'integer').reduce((x, y) => {
-      const result = x.value.add(y.value);
-      const _ret = new IntegerASTNode(result.toString());
-      _ret.value = result;
-      return _ret;
-    }, new IntegerASTNode('0').compute());
-
-    integerMinus.value.positive = !integerMinus.value.positive;
-
-    const incomputableAddList = addList.filter(x => x.type !== 'integer');
-    const integerAdd = addList.filter(x => x.type === 'integer').reduce((x, y) => {
-      const result = x.value.add(y.value);
-      const _ret = new IntegerASTNode(result.toString());
-      _ret.value = result;
-      return _ret;
-    }, integerMinus);
-
-    ret.add('add', integerAdd);
-    incomputableAddList.forEach((x) => {
-      ret.add('add', x);
-    });
-
-    incomputableMinusList.forEach((x) => {
-      ret.add('minus', x);
-    });
-    return ret.getSimplify();
-  }
-  toString() {
-    let result = this.child[0].value.toString();
-    for (let i = 1; i < this.child.length; i++) {
-      const another = this.child[i].value.toString();
-      switch (this.child[i].type) {
-        case 'add':
-          result += ` + ${another}`;
-          break;
-        case 'minus':
-          result += ` - ${another}`;
-          break;
-        default:
-          break;
-      }
-    }
-    return `(${result})`;
-  }
-  clone() {
-    const ret = new TermASTNode(this.child[0].value.clone());
-    for (let i = 1; i < this.child.length; i++) {
-      ret.add(this.child[i].type, this.child[i].value.clone());
-    }
-    return ret;
   }
 }
 
@@ -881,12 +927,3 @@ class Lexical {
     return result;
   }
 }
-
-
-const b = new Lexical();
-b.setSym('x');
-b.setSym('y');
-b.generateTokens('x^(3+1*1+2-5*1)+x^2+sqrt(x^3/2/2/3+1)+7835789732498*23478*(234324*23847)*x*2734/2/98*27384*x*23*0');
-const ast2 = b.parse().ast;
-const result = ast2.compute();
-console.info(result.toString());
