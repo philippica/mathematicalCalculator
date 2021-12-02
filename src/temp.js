@@ -1,3 +1,14 @@
+/* eslint-disable no-param-reassign */
+/* eslint-disable no-bitwise */
+/* eslint-disable no-mixed-operators */
+/* eslint-disable no-underscore-dangle */
+/* eslint-disable no-plusplus */
+/* eslint-disable prefer-destructuring */
+/* eslint-disable no-tabs */
+/* eslint-disable no-useless-escape */
+/* eslint-disable no-unused-vars */
+
+/* eslint-disable consistent-return */
 
 class BigInteger {
   static _base = 10;
@@ -315,14 +326,12 @@ class IntegerASTNode extends ASTNode {
     this.obj = value;
   }
   compute() {
-    this.value = new BigInteger(this.obj.content);
-    return {
-      computable: true,
-      value: this.value,
-    };
+    const ret = this.clone();
+    ret.value = new BigInteger(this.obj);
+    return ret;
   }
   toString() {
-    return this.obj.content;
+    return this.obj;
   }
   clone() {
     return new IntegerASTNode(this.obj);
@@ -341,18 +350,22 @@ class FunctionASTNode extends ASTNode {
     this.functionName = functionName;
   }
   compute() {
-    const parameter = this.parameter.compute();
-    if (parameter.computable) {
-      const paraStr = parameter.value.toString();
-      return {
-        computable: false,
-        value: `${this.functionName}(${paraStr})`,
-      };
+    const ret = this.clone();
+    ret.parameter = ret.parameter.compute();
+    return ret;
+  }
+  clone() {
+    const ret = new FunctionASTNode(this.functionName, this.parameter.clone());
+    return ret;
+  }
+  toString() {
+    let ret;
+    if (this.parameter.type === 'term') {
+      ret = `${this.functionName}${this.parameter.toString()}`;
+    } else {
+      ret = `${this.functionName}(${this.parameter.toString()})`;
     }
-    return {
-      computable: false,
-      value: `${this.functionName}(${parameter.value})`,
-    };
+    return ret;
   }
 }
 
@@ -362,10 +375,8 @@ class SymbolASTNode extends ASTNode {
     this.symbolName = symbolName;
   }
   compute() {
-    return {
-      computable: false,
-      value: this.symbolName,
-    };
+    const ret = this.clone();
+    return ret;
   }
   toString() {
     return this.symbolName;
@@ -397,6 +408,9 @@ class ExponentASTNode extends ASTNode {
     if (!this.power) {
       return this.base;
     }
+    if (this.power.type === 'integer' && this.power?.obj === '1') {
+      return this.base;
+    }
     return this;
   }
   quickPower(base, power) {
@@ -412,20 +426,14 @@ class ExponentASTNode extends ASTNode {
   compute() {
     const base = this.base.compute();
     const power = this.power.compute();
-    if (base.computable && power.computable) {
+    if (base.type === 'integer' && power.type === 'integer') {
       let result = new BigInteger(1);
       if (power.value.positive) {
         result = this.quickPower(base.value, power.value);
       }
-      return {
-        computable: true,
-        value: result,
-      };
+      return new IntegerASTNode(result.toString());
     }
-    return {
-      computable: false,
-      value: `${base.value} ^ ${power.value}`,
-    };
+    return new ExponentASTNode(base, power).getSimplify();
   }
 
   toString() {
@@ -434,7 +442,7 @@ class ExponentASTNode extends ASTNode {
     return `${base} ^ ${power}`;
   }
   clone() {
-    return new IntegerASTNode(this.obj);
+    return new ExponentASTNode(this.base, this.power);
   }
 }
 
@@ -444,26 +452,8 @@ class UnaryASTNode extends ASTNode {
   }
   compute() {
     const temp = this.child.compute();
-    if (!temp.computable) {
-      if (this.type === 'positive') {
-        this.value = `+${temp.value}`;
-      } else if (this.type === 'negative') {
-        this.value = `(-${temp.value})`;
-      }
-      return {
-        computable: false,
-        value: this.value,
-      };
-    }
-    if (this.type === 'positive') {
-      this.value = temp.value;
-    } else if (this.type === 'negative') {
-      this.value = temp.value.inverse();
-    }
-    return {
-      computable: true,
-      value: this.value,
-    };
+    const ret = new UnaryASTNode(this.type, temp);
+    return ret;
   }
   toString() {
     const temp = this.child.toString();
@@ -483,7 +473,10 @@ class UnaryASTNode extends ASTNode {
 
 class FactorASTNode extends ASTNode {
   constructor(value) {
-    super('factor', [{ type: 'multiply', value }]);
+    super('factor', []);
+    if (value) {
+      this.add('multiply', value);
+    }
   }
   add(type, value) {
     this.child.push({ type, value });
@@ -491,58 +484,58 @@ class FactorASTNode extends ASTNode {
   getSimplify() {
     this.child = this.child?.filter((child) => {
       if (child.value.type === 'integer') {
-        return child.value?.obj?.content !== '1';
+        return child.value?.obj !== '1';
       }
       return true;
     });
+    const zero = this.child?.filter((child) => {
+      if (child.value.type === 'integer') {
+        return child.value?.obj === '0';
+      }
+      return false;
+    });
+    if (zero.length > 0) {
+      return new IntegerASTNode('0');
+    }
     if (this.child.length === 1) {
       return this.child[0].value;
+    }
+    if (this.child.length === 0) {
+      return new IntegerASTNode('1');
     }
     return this;
   }
   compute() {
-    const computedList = this.child.map((x) => {
-      const temp = x.value.compute();
-      temp.type = x.type;
-      return temp;
+    const ret = new FactorASTNode();
+    const multiplyList = this.child.filter(x => x.type === 'multiply').map(x => x.value.compute());
+    const divideList = this.child.filter(x => x.type === 'divide').map(x => x.value.compute());
+
+    const incomputableMultiplyList = multiplyList.filter(x => x.type !== 'integer');
+    const integerMultiplyList = multiplyList.filter(x => x.type === 'integer').reduce((x, y) => {
+      const result = x.value.multiply(y.value);
+      const _ret = new IntegerASTNode(result.toString());
+      _ret.value = result;
+      return _ret;
+    }, new IntegerASTNode('1').compute());
+
+    const incomputableDivideList = divideList.filter(x => x.type !== 'integer');
+    const integerDivideList = divideList.filter(x => x.type === 'integer').reduce((x, y) => {
+      const result = x.value.multiply(y.value);
+      const _ret = new IntegerASTNode(result.toString());
+      _ret.value = result;
+      return _ret;
+    }, new IntegerASTNode('1').compute());
+
+    ret.add('multiply', integerMultiplyList);
+    incomputableMultiplyList.forEach((x) => {
+      ret.add('multiply', x);
     });
-    const computableList = computedList.filter(x => x.computable);
-    const computableResult = computableList.length > 0 ? computableList.reduce((x, y) => {
-      if (y.type === 'multiply') {
-        return { computable: true, value: x.value.multiply(y.value), type: 'multiply' };
-      }
-      return { computable: true, value: x.value.divide(y.value), type: 'divide' };
-    }, { type: 'multiply', value: new BigInteger(1), computable: true }).value : new BigInteger(1);
 
-    const incomputableList = computedList.filter(x => !x.computable);
-    const incomputableResult = incomputableList.length > 0 ? incomputableList.reduce((x, y) => {
-      if (y.type === 'multiply') {
-        return { computable: false, value: `${x.value} * ${y.value}`, type: 'multiply' };
-      }
-      return { computable: false, value: `${x.value} / ${y.value}`, type: 'divide' };
-    }).value : '';
-
-    if (incomputableResult !== '') {
-      if (computableResult.isEqual(1)) {
-        return {
-          computable: false,
-          value: incomputableResult,
-        };
-      } else if (incomputableList[0].type === 'multiply') {
-        return {
-          computable: false,
-          value: `${computableResult.toString()} * ${incomputableResult}`,
-        };
-      }
-      return {
-        computable: false,
-        value: `${computableResult.toString()} / ${incomputableResult}`,
-      };
-    }
-    return {
-      computable: true,
-      value: computableResult,
-    };
+    ret.add('divide', integerDivideList);
+    incomputableDivideList.forEach((x) => {
+      ret.add('divide', x);
+    });
+    return ret.getSimplify();
   }
   derivative(symbol) {
     const computedList = this.child.map((x) => {
@@ -580,65 +573,61 @@ class FactorASTNode extends ASTNode {
 
 class TermASTNode extends ASTNode {
   constructor(value) {
-    super('term', [{ type: 'add', value }]);
+    super('term', []);
+    if (value) {
+      this.add('add', value);
+    }
   }
   add(type, value) {
     this.child.push({ type, value });
   }
   getSimplify() {
     this.child = this.child?.filter((child) => {
-      if (child.value?.isEqual) {
-        return child.value?.isEqual(0);
+      if (child.value.type === 'integer') {
+        return !child.value?.value?.isZero();
       }
       return true;
     });
     if (this.child.length === 1) {
       return this.child[0].value;
     }
+    if (this.child.length === 0) {
+      return new IntegerASTNode('0');
+    }
     return this;
   }
   compute() {
-    const computedList = this.child.map((x) => {
-      const temp = x.value.compute();
-      temp.type = x.type;
-      return temp;
+    const ret = new TermASTNode();
+    const addList = this.child.filter(x => x.type === 'add').map(x => x.value.compute());
+    const minusList = this.child.filter(x => x.type === 'minus').map(x => x.value.compute());
+
+    const incomputableMinusList = minusList.filter(x => x.type !== 'integer');
+    const integerMinus = minusList.filter(x => x.type === 'integer').reduce((x, y) => {
+      const result = x.value.add(y.value);
+      const _ret = new IntegerASTNode(result.toString());
+      _ret.value = result;
+      return _ret;
+    }, new IntegerASTNode('0').compute());
+
+    integerMinus.value.positive = !integerMinus.value.positive;
+
+    const incomputableAddList = addList.filter(x => x.type !== 'integer');
+    const integerAdd = addList.filter(x => x.type === 'integer').reduce((x, y) => {
+      const result = x.value.add(y.value);
+      const _ret = new IntegerASTNode(result.toString());
+      _ret.value = result;
+      return _ret;
+    }, integerMinus);
+
+    ret.add('add', integerAdd);
+    incomputableAddList.forEach((x) => {
+      ret.add('add', x);
     });
-    const computableList = computedList.filter(x => x.computable);
-    const computableResult = computableList.length > 0 ? computableList.reduce((x, y) => {
-      if (y.type === 'add') {
-        return { computable: true, value: x.value.add(y.value), type: 'add' };
-      }
-      return { computable: true, value: x.value.minus(y.value), type: 'minus' };
-    }, { type: 'add', value: new BigInteger(0), computable: true }).value : new BigInteger(0);
 
-    const incomputableList = computedList.filter(x => !x.computable);
-    let incomputableResult = incomputableList.length > 0 ? incomputableList.reduce((x, y) => {
-      if (y.type === 'add') {
-        return { computable: false, value: `${x.value} + ${y.value}`, type: 'add' };
-      }
-      return { computable: false, value: `${x.value} - ${y.value}`, type: 'minus' };
-    }).value : '';
-
-    if (incomputableList && incomputableList[0]?.type === 'minus') {
-      incomputableResult = `-${incomputableResult}`;
-    }
-
-    if (incomputableResult !== '') {
-      if (computableResult.isZero()) {
-        return {
-          computable: false,
-          value: `(${incomputableResult})`,
-        };
-      }
-      return {
-        computable: false,
-        value: `(${computableResult.toString()} + (${incomputableResult}))`,
-      };
-    }
-    return {
-      computable: true,
-      value: computableResult,
-    };
+    incomputableMinusList.forEach((x) => {
+      ret.add('minus', x);
+    });
+    return ret.getSimplify();
   }
   toString() {
     let result = this.child[0].value.toString();
@@ -796,7 +785,7 @@ class Lexical {
       return new ParseResult(currentIndex + 1, 'expression', result.ast);
     }
     if (firstToken.type === 'integer') {
-      return new ParseResult(currentIndex + 1, firstToken.type, new IntegerASTNode(firstToken));
+      return new ParseResult(currentIndex + 1, firstToken.type, new IntegerASTNode(firstToken.content));
     }
     if (firstToken.type === 'symbol') {
       return new ParseResult(currentIndex + 1, firstToken.type, new SymbolASTNode(firstToken.content));
@@ -908,8 +897,7 @@ class Lexical {
 const b = new Lexical();
 b.setSym('x');
 b.setSym('y');
-b.generateTokens('95123^12');
+b.generateTokens('x^(3+1*1+2-5*1)+x^2+sqrt(x^3/2/2/3+1)+7835789732498*23478*(234324*23847)*x*2734/2/98*27384*x*23*0');
 const ast2 = b.parse().ast;
 const result = ast2.compute();
-if (result.computable)console.info(result.value.toString());
-else console.info(result.value);
+console.info(result.toString());
