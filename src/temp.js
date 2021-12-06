@@ -1,4 +1,3 @@
-
 class BigInteger {
   static _base = 10;
   // In rowDec, there's a _base^compressDegree base number
@@ -331,33 +330,6 @@ class IntegerASTNode extends ASTNode {
   }
 }
 
-
-class FunctionASTNode extends ASTNode {
-  constructor(functionName, parameter) {
-    super('function');
-    this.parameter = parameter;
-    this.functionName = functionName;
-  }
-  compute() {
-    const ret = this.clone();
-    ret.parameter = ret.parameter.compute();
-    return ret;
-  }
-  clone() {
-    const ret = new FunctionASTNode(this.functionName, this.parameter.clone());
-    return ret;
-  }
-  toString() {
-    let ret;
-    if (this.parameter.type === 'term') {
-      ret = `${this.functionName}${this.parameter.toString()}`;
-    } else {
-      ret = `${this.functionName}(${this.parameter.toString()})`;
-    }
-    return ret;
-  }
-}
-
 class SymbolASTNode extends ASTNode {
   constructor(symbolName) {
     super('symbol');
@@ -426,6 +398,15 @@ class TermASTNode extends ASTNode {
     this.child.push({ type, value });
   }
   getSimplify() {
+    const addChild = this.child?.filter(child => child.value.type === 'term' && child.type === 'add');
+    this.child = this.child?.filter(child => child.value.type !== 'term' || child.type !== 'add');
+
+    addChild.forEach((term) => {
+      term.value.child.forEach((child) => {
+        this.child.push(child);
+      });
+    });
+
     this.child = this.child?.filter((child) => {
       if (child.value.type === 'integer') {
         return !child.value?.value?.isZero();
@@ -441,6 +422,7 @@ class TermASTNode extends ASTNode {
     return this;
   }
   compute() {
+    this.getSimplify();
     const ret = new TermASTNode();
     const addList = this.child.filter(x => x.type === 'add').map(x => x.value.compute());
     const minusList = this.child.filter(x => x.type === 'minus').map(x => x.value.compute());
@@ -463,7 +445,13 @@ class TermASTNode extends ASTNode {
       return _ret;
     }, integerMinus);
 
-    ret.add('add', integerAdd);
+
+    if (integerAdd.value.positive === true) {
+      ret.add('add', integerAdd);
+    } else {
+      integerAdd.value.positive = true;
+      ret.add('minus', integerAdd);
+    }
     incomputableAddList.forEach((x) => {
       for (const element of x.symbols) {
         ret.symbols.add(element);
@@ -481,6 +469,9 @@ class TermASTNode extends ASTNode {
   }
   toString() {
     let result = this.child[0].value.toString();
+    if (this.child[0].type === 'minus') {
+      result = `-${result}`;
+    }
     for (let i = 1; i < this.child.length; i++) {
       const another = this.child[i].value.toString();
       switch (this.child[i].type) {
@@ -497,8 +488,8 @@ class TermASTNode extends ASTNode {
     return `(${result})`;
   }
   clone() {
-    const ret = new TermASTNode(this.child[0].value.clone());
-    for (let i = 1; i < this.child.length; i++) {
+    const ret = new TermASTNode();
+    for (let i = 0; i < this.child.length; i++) {
       ret.add(this.child[i].type, this.child[i].value.clone());
     }
     return ret;
@@ -509,7 +500,7 @@ class TermASTNode extends ASTNode {
       x.value = x.value.derivative(symbol);
       return x;
     });
-    return ret;
+    return ret.getSimplify();
   }
 }
 
@@ -525,6 +516,14 @@ class FactorASTNode extends ASTNode {
     this.child.push({ type, value });
   }
   getSimplify() {
+    const factorChild = this.child?.filter(child => child.value.type === 'factor' && child.type === 'multiply');
+    this.child = this.child?.filter(child => child.value.type !== 'factor' || child.type !== 'multiply');
+
+    factorChild.forEach((factor) => {
+      factor.value.child.forEach((child) => {
+        this.child.push(child);
+      });
+    });
     this.child = this.child?.filter((child) => {
       if (child.value.type === 'integer') {
         return child.value?.obj !== '1';
@@ -540,7 +539,7 @@ class FactorASTNode extends ASTNode {
     if (zero.length > 0) {
       return new IntegerASTNode('0').compute();
     }
-    if (this.child.length === 1) {
+    if (this.child.length === 1 && this.child[0].type === 'multiply') {
       return this.child[0].value;
     }
     if (this.child.length === 0) {
@@ -596,8 +595,8 @@ class FactorASTNode extends ASTNode {
     return ret;
   }
   clone() {
-    const ret = new FactorASTNode(this.child[0].value.clone());
-    for (let i = 1; i < this.child.length; i++) {
+    const ret = new FactorASTNode();
+    for (let i = 0; i < this.child.length; i++) {
       ret.add(this.child[i].type, this.child[i].value.clone());
     }
     return ret;
@@ -605,11 +604,13 @@ class FactorASTNode extends ASTNode {
 
   toString() {
     let result = this.child[0].value.toString();
+    let hasMultiply = this.child[0].type === 'multiply';
     for (let i = 1; i < this.child.length; i++) {
       const another = this.child[i].value.toString();
       switch (this.child[i].type) {
         case 'multiply':
           result += ` * ${another}`;
+          hasMultiply = 1;
           break;
         case 'divide':
           result += ` / ${another}`;
@@ -617,6 +618,9 @@ class FactorASTNode extends ASTNode {
         default:
           break;
       }
+    }
+    if (hasMultiply === 0) {
+      result = `(1 / ${result})`;
     }
     return result;
   }
@@ -689,6 +693,64 @@ class ExponentASTNode extends ASTNode {
     }
   }
 }
+
+class FunctionASTNode extends ASTNode {
+  constructor(functionName, parameter) {
+    super('function');
+    this.parameter = parameter;
+    this.functionName = functionName;
+  }
+  compute() {
+    const ret = this.clone();
+    ret.parameter = ret.parameter.compute();
+    return ret;
+  }
+  clone() {
+    const ret = new FunctionASTNode(this.functionName, this.parameter.clone());
+    return ret;
+  }
+  toString() {
+    let ret;
+    if (this.parameter.type === 'term') {
+      ret = `${this.functionName}${this.parameter.toString()}`;
+    } else {
+      ret = `${this.functionName}(${this.parameter.toString()})`;
+    }
+    return ret;
+  }
+  functionDerivativeProcess(functionAst) {
+    let ret;
+    switch (functionAst.functionName) {
+      case 'sin':
+        functionAst.functionName = 'cos';
+        ret = functionAst;
+        break;
+      case 'exp':
+        functionAst.functionName = 'exp';
+        ret = functionAst;
+        break;
+      case 'cos':
+        functionAst.functionName = 'sin';
+        ret = new UnaryASTNode('negative', functionAst);
+        break;
+      case 'ln':
+        ret = new FactorASTNode(new IntegerASTNode('1'));
+        ret.add('divide', functionAst.parameter);
+        break;
+      default:
+        functionAst.functionName = `${functionAst.functionName}'`;
+        ret = functionAst;
+    }
+    return ret;
+  }
+  derivative(symbol) {
+    const rightPart = this.functionDerivativeProcess(this.clone());
+    const ret = new FactorASTNode(rightPart);
+    ret.add('multiply', this.parameter.derivative(symbol));
+    return ret;
+  }
+}
+
 
 class Lexical {
   constructor(str) {
@@ -927,3 +989,15 @@ class Lexical {
     return result;
   }
 }
+
+
+const b = new Lexical();
+b.setSym('x');
+b.setSym('y');
+b.generateTokens('x^5+x*(y-1) + x*x*x');
+const ast2 = b.parse().ast;
+const result = ast2.compute();
+// console.info(result.derivative('x').toString());
+// console.info(result.derivative('x').compute().toString());
+const u = result.derivative('x').compute().toString();
+console.info(u);
