@@ -1,19 +1,45 @@
 <html>
     <head>
         <script src='../dist/js/index.js'></script>
+        <script>
+            const compute = () => {
+                const expression = document.getElementById('expression').value;
+                const b = new mathematica.Lexical();
+                b.setSym('x');
+                b.setSym('y');
+                b.generateTokens(expression);
+                const ast2 = b.parse().ast;
+                const result = ast2.compute();
+                // console.info(result.derivative('x').toString());
+                // console.info(result.derivative('x').compute().toString());
+                const u = result.compute().toString();
+                document.getElementById('result').innerHTML = u;
+                console.info(u);
+            }
+            const derivative = () => {
+                const expression = document.getElementById('expression').value;
+                const b = new mathematica.Lexical();
+                b.setSym('x');
+                b.setSym('y');
+                b.generateTokens(expression);
+                const ast2 = b.parse().ast;
+                const result = ast2.compute();
+                const u = result.derivative('x').compute().toString();
+                document.getElementById('result').innerHTML = u;
+                console.info(u);
+            }
+        </script>
+        <style>
+            #expression {
+                width: 500px;
+                height: 400px;
+            }
+        </style>
     </head>
     <body>
-        <script>
-            const b = new mathematica.Lexical();
-            b.setSym('x');
-            b.setSym('y');
-            b.generateTokens('sin(x)*cos(x)*x');
-            const ast2 = b.parse().ast;
-            const result = ast2.compute();
-            // console.info(result.derivative('x').toString());
-            // console.info(result.derivative('x').compute().toString());
-            const u = result.derivative('x').compute().toString();
-            console.info(u);
-        </script>
+        <textarea width="800px" height="1200px" id="expression">3*(-4)*9*sin(x)*cos(x)</textarea>
+        <button onclick="compute()">计算</button>
+        <button onclick="derivative()">求导</button>
+        <div id="result"></div>
     </body>
 </html>

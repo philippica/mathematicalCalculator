@@ -4,6 +4,7 @@ import { FactorASTNode } from './factor-ast-node';
 import { ExponentASTNode } from './exponent-ast-node';
 import { FunctionASTNode } from './function-ast-node';
 import { SymbolASTNode } from './symbol-ast-node';
+import { UnaryASTNode } from './unary-ast-node';
 
 
 const LEX_STATE = {
