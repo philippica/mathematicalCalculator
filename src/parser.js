@@ -1,3 +1,11 @@
+import { BigInteger } from './big-integer';
+import { IntegerASTNode } from './integer-ast-node';
+import { TermASTNode } from './term-ast-node';
+import { FactorASTNode } from './factor-ast-node';
+import { ExponentASTNode } from './exponent-ast-node';
+import { FunctionASTNode } from './function-ast-node';
+
+
 const LEX_STATE = {
   VACANT: 0,
   RECEIVED_FUNC: 1,
@@ -22,90 +30,57 @@ class ParseResult {
 
 class ASTNode {
   constructor(type, childNode, value) {
+    this.symbols = new Set();
     this.child = childNode;
     this.value = value;
     this.type = type;
   }
 }
 
-class FunctionASTNode extends ASTNode {
-  constructor(functionName, parameter) {
-    super('function');
-    this.parameter = parameter;
-    this.functionName = functionName;
-  }
-}
 
-class IntegerASTNode extends ASTNode {
-  constructor(value) {
-    super('integer', null);
-    this.obj = value;
+
+class SymbolASTNode extends ASTNode {
+  constructor(symbolName) {
+    super('symbol');
+    this.symbolName = symbolName;
+    this.symbols.add(symbolName);
   }
   compute() {
-    this.value = parseInt(this.obj.content, 10);
-    return this.value;
+    const ret = this.clone();
+    return ret;
   }
-}
-
-class UnaryASTNode extends ASTNode {
-  constructor(type, child, value) {
-    super(type, child, null);
+  toString() {
+    return this.symbolName;
   }
-  compute() {
-    const temp = this.child.compute();
-    if (this.type === 'positive') {
-      this.value = temp;
-    } else if (this.type === 'negative') {
-      this.value = -temp;
+  clone() {
+    return new SymbolASTNode(this.symbolName);
+  }
+  derivative(symbol) {
+    let result;
+    if (this.symbolName === symbol) {
+      result = new IntegerASTNode('1');
+    } else {
+      result = new IntegerASTNode('0');
     }
-    return this.value;
-  }
-}
-
-class ListASTNode extends ASTNode {
-  constructor(value) {
-    super('factor', [{ type: 'first', value }]);
-  }
-  add(type, value) {
-    this.child.push({ type, value });
-  }
-  getSimplify() {
-    if (this.child.length === 1) {
-      return this.child[0].value;
-    }
-    return this;
-  }
-  compute() {
-    this.value = this.child[0].value.compute();
-    for (let i = 1; i < this.child.length; i++) {
-      switch (this.child[i].type) {
-        case 'add':
-          this.value += this.child[i].value.compute();
-          break;
-        case 'minus':
-          this.value -= this.child[i].value.compute();
-          break;
-        case 'multiply':
-          this.value *= this.child[i].value.compute();
-          break;
-        case 'divide':
-          this.value /= this.child[i].value.compute();
-          break;
-        default:
-          break;
-      }
-    }
-    return this.value;
+    return result;
   }
 }
 
 
-class Lexical {
+
+
+
+export class Lexical {
   constructor(str) {
+    this.symbols = new Set();
     this.tokens = [];
     if (str) {
       this.generateTokens(str);
     }
+  }
+
+  setSym(symbol) {
+    this.symbols.add(symbol);
   }
 
   singleCharacterProcess(charactor) {
@@ -135,6 +110,7 @@ class Lexical {
       case '-':
       case '*':
       case '/':
+      case '^':
       case '=':
         this.tokens.push(new Token('sign', charactor));
         return LEX_STATE.VACANT;
@@ -160,7 +136,7 @@ class Lexical {
   }
 
   receiveFuncProcess(charactor) {
-    if (/^[_0-9a-zA-Z|\/|\\]$/.test(charactor)) {
+    if (/^[_0-9a-zA-Z|\\]$/.test(charactor)) {
       const latestToken = this.tokens.pop();
       latestToken.content += charactor;
       this.tokens.push(latestToken);
@@ -196,6 +172,11 @@ class Lexical {
           break;
       }
     }
+    for (const token of this.tokens) {
+      if (token.type === 'function' && this.symbols.has(token.content)) {
+        token.type = 'symbol';
+      }
+    }
     return this.tokens;
   }
 
@@ -203,10 +184,11 @@ class Lexical {
     expr → + unary | - unary
     unary	→ term { + term | - term }
     term	→ factor { * factor | / factor }
-    factor	→ ( expr ) | digit | fun()
+    factor -> power ^ power
+    power	→ ( expr ) | digit | fun()
   */
 
-  findFactor(tokenIndex) {
+  findPower(tokenIndex) {
     let currentIndex = tokenIndex;
     const firstToken = this.tokens[currentIndex];
     if (firstToken?.content === '(') {
@@ -218,7 +200,10 @@ class Lexical {
       return new ParseResult(currentIndex + 1, 'expression', result.ast);
     }
     if (firstToken.type === 'integer') {
-      return new ParseResult(currentIndex + 1, firstToken.type, new IntegerASTNode(firstToken));
+      return new ParseResult(currentIndex + 1, firstToken.type, new IntegerASTNode(firstToken.content));
+    }
+    if (firstToken.type === 'symbol') {
+      return new ParseResult(currentIndex + 1, firstToken.type, new SymbolASTNode(firstToken.content));
     }
     if (firstToken.type === 'function' && this.tokens[currentIndex + 1].content === '(') {
       const result = this.findExpression(currentIndex + 2);
@@ -231,12 +216,35 @@ class Lexical {
       ast.parameter = result.ast;
       return new ParseResult(currentIndex + 1, firstToken.type, new FunctionASTNode(firstToken.content, result.ast));
     }
+    if (firstToken?.content === '+') {
+      const temp = this.findTerm(tokenIndex + 1);
+      const ast = new UnaryASTNode('positive', temp.ast);
+      currentIndex = temp.index;
+      return new ParseResult(currentIndex, 'expression', ast);
+    } else if (firstToken?.content === '-') {
+      const temp = this.findTerm(tokenIndex + 1);
+      const ast = new UnaryASTNode('negative', temp.ast);
+      currentIndex = temp.index;
+      return new ParseResult(currentIndex, 'expression', ast);
+    }
+  }
+
+  findFactor(tokenIndex) {
+    const result = this.findPower(tokenIndex);
+    let currentIndex = result.index;
+    const ast = new ExponentASTNode(result.ast);
+    if (this.tokens[currentIndex]?.content === '^') {
+      const temp = this.findPower(currentIndex + 1);
+      ast.add(temp.ast);
+      currentIndex = temp.index;
+    }
+    return new ParseResult(currentIndex, 'term', ast.getSimplify());
   }
 
   findTerm(tokenIndex) {
     const result = this.findFactor(tokenIndex);
     let currentIndex = result.index;
-    const ast = new ListASTNode(result.ast);
+    const ast = new FactorASTNode(result.ast);
     while (true) {
       if (this.tokens[currentIndex]?.content === '*') {
         const temp = this.findFactor(currentIndex + 1);
@@ -253,10 +261,10 @@ class Lexical {
     return new ParseResult(currentIndex, 'term', ast.getSimplify());
   }
 
-  findUnaryExpression(tokenIndex) {
+  findExpression(tokenIndex) {
     const result = this.findTerm(tokenIndex);
     let currentIndex = result.index;
-    const ast = new ListASTNode(result.ast);
+    const ast = new TermASTNode(result.ast);
     while (true) {
       if (this.tokens[currentIndex]?.content === '+') {
         const temp = this.findTerm(currentIndex + 1);
@@ -273,7 +281,7 @@ class Lexical {
     return new ParseResult(currentIndex, 'unaryExpression', ast.getSimplify());
   }
 
-  findExpression(tokenIndex) {
+  findUnaryExpression(tokenIndex) {
     const firstToken = this.tokens[tokenIndex];
     let currentIndex = tokenIndex;
     let ast;

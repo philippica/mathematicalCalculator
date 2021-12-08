@@ -1,5 +1,19 @@
 <html>
     <head>
-        <script src='../src/big-integer.js'></script>
+        <script src='../dist/js/index.js'></script>
     </head>
+    <body>
+        <script>
+            const b = new mathematica.Lexical();
+            b.setSym('x');
+            b.setSym('y');
+            b.generateTokens('sin(x)*cos(x)*x');
+            const ast2 = b.parse().ast;
+            const result = ast2.compute();
+            // console.info(result.derivative('x').toString());
+            // console.info(result.derivative('x').compute().toString());
+            const u = result.derivative('x').compute().toString();
+            console.info(u);
+        </script>
+    </body>
 </html>
