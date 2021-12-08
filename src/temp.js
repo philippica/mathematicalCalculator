@@ -373,13 +373,23 @@ class UnaryASTNode extends ASTNode {
   constructor(type, child) {
     super(type, child, null);
   }
+  getSimplify() {
+    if (this.type === 'positive') {
+      return this.child;
+    }
+    if (this.child.type === 'negative') {
+      return this.child.child;
+    }
+    return this;
+  }
+
   compute() {
     const temp = this.child.compute();
     const ret = new UnaryASTNode(this.type, temp);
     for (const element of temp.symbols) {
       ret.symbols.add(element);
     }
-    return ret;
+    return ret.getSimplify();
   }
   toString() {
     if (this.strRaw) {
@@ -484,6 +494,19 @@ class TermASTNode extends ASTNode {
     if (this.child.length === 0) {
       return new IntegerASTNode('0').compute();
     }
+
+    this.child.forEach((child) => {
+      if (child.value.type === 'positive') {
+        child.value = child.value.child;
+      } else if (child.value.type === 'negative') {
+        child.value = child.value.child;
+        if (child.type === 'add') {
+          child.type = 'minus';
+        } else {
+          child.type = 'add';
+        }
+      }
+    });
     return this;
   }
   compute() {
@@ -668,6 +691,7 @@ class FactorASTNode extends ASTNode {
     if (this.child.length === 0) {
       return new IntegerASTNode('1').compute();
     }
+
     this.combine();
     if (this.child.length === 1 && this.child[0].type === 'multiply') {
       return this.child[0].value;
@@ -675,6 +699,20 @@ class FactorASTNode extends ASTNode {
     if (this.child.length === 0) {
       return new IntegerASTNode('1').compute();
     }
+
+    let negativeCount = 0;
+    this.child?.forEach((child) => {
+      if (child.value.type === 'negative') {
+        child.value = child.value.child;
+        negativeCount++;
+      } else if (child.value.type === 'positive') {
+        child.value = child.value.child;
+      }
+    });
+    if (negativeCount & 1) {
+      return new UnaryASTNode('negative', this);
+    }
+
     return this;
   }
   compute() {
@@ -722,7 +760,7 @@ class FactorASTNode extends ASTNode {
       term.child[i].value = term.child[i].value.derivative(symbol);
       ret.add('add', term);
     }
-    return ret;
+    return ret.getSimplify();
   }
   clone() {
     const ret = new FactorASTNode();
@@ -1132,7 +1170,7 @@ class Lexical {
 const b = new Lexical();
 b.setSym('x');
 b.setSym('y');
-b.generateTokens('sin(x)*cos(x)');
+b.generateTokens('sin(x)*cos(x)*x');
 const ast2 = b.parse().ast;
 const result = ast2.compute();
 // console.info(result.derivative('x').toString());
