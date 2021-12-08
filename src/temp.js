@@ -19,6 +19,10 @@ class BigInteger {
   }
 
   parseNumber(_num) {
+    if (_num < 0) {
+      this.positive = false;
+      _num = -_num;
+    }
     let num = _num;
     this.rawDec = [];
     while (num !== 0) {
@@ -271,6 +275,9 @@ class BigInteger {
         return false;
       }
     }
+    if (num.positive !== this.positive) {
+      return false;
+    }
     return true;
   }
 }
@@ -311,11 +318,15 @@ class ASTNode {
 class IntegerASTNode extends ASTNode {
   constructor(value) {
     super('integer', null);
+    if (value.rawDec) {
+      this.obj = value.toString();
+      this.value = value;
+    }
     this.obj = value;
   }
   compute() {
     const ret = this.clone();
-    ret.value = new BigInteger(this.obj);
+    ret.value = this.value ?? new BigInteger(this.obj);
     return ret;
   }
   toString() {
@@ -371,12 +382,16 @@ class UnaryASTNode extends ASTNode {
     return ret;
   }
   toString() {
+    if (this.strRaw) {
+      return this.strRaw;
+    }
     const temp = this.child.toString();
     if (this.type === 'positive') {
-      return `+${temp}`;
+      this.strRaw = `+${temp}`;
     } else if (this.type === 'negative') {
-      return `(-${temp})`;
+      this.strRaw = `(-${temp})`;
     }
+    return this.strRaw;
   }
   clone() {
     return new UnaryASTNode(this.type, this.child.clone());
@@ -397,6 +412,53 @@ class TermASTNode extends ASTNode {
   add(type, value) {
     this.child.push({ type, value });
   }
+
+  combine() {
+    const childStrMap = new Map();
+    this.child.forEach((term) => {
+      const str = term.value.toString();
+      const count = childStrMap.get(str);
+      if (count) {
+        childStrMap.set(str, count + 1);
+        if (term.type === 'add') {
+          childStrMap.set(str, count + 1);
+        } else {
+          childStrMap.set(str, count - 1);
+        }
+      } else {
+        if (term.type === 'add') {
+          childStrMap.set(str, 1);
+        } else {
+          childStrMap.set(str, -1);
+        }
+      }
+    });
+    const newChild = [];
+    this.child.forEach((term) => {
+      const str = term.value.toString();
+      const count = childStrMap.get(str);
+      if (count === 0) {
+        return;
+      }
+      if (count === 1) {
+        term.type = 'add';
+        newChild.push(term);
+      } else if (count === -1) {
+        term.type = 'minus';
+        newChild.push(term);
+      } else {
+        const result = new FactorASTNode();
+        result.add('multiply', new IntegerASTNode(count.toString()));
+        result.add('multiply', term.value);
+        term.value = result;
+        term.type = 'add';
+        newChild.push(term);
+      }
+      childStrMap.set(str, 0);
+    });
+    this.child = newChild;
+  }
+
   getSimplify() {
     const addChild = this.child?.filter(child => child.value.type === 'term' && child.type === 'add');
     this.child = this.child?.filter(child => child.value.type !== 'term' || child.type !== 'add');
@@ -413,6 +475,9 @@ class TermASTNode extends ASTNode {
       }
       return true;
     });
+
+    this.combine();
+
     if (this.child.length === 1) {
       return this.child[0].value;
     }
@@ -468,6 +533,9 @@ class TermASTNode extends ASTNode {
     return ret.getSimplify();
   }
   toString() {
+    if (this.strRaw) {
+      return this.strRaw;
+    }
     let result = this.child[0].value.toString();
     if (this.child[0].type === 'minus') {
       result = `-${result}`;
@@ -485,7 +553,8 @@ class TermASTNode extends ASTNode {
           break;
       }
     }
-    return `(${result})`;
+    this.strRaw = `(${result})`;
+    return this.strRaw;
   }
   clone() {
     const ret = new TermASTNode();
@@ -515,6 +584,63 @@ class FactorASTNode extends ASTNode {
   add(type, value) {
     this.child.push({ type, value });
   }
+
+  combine() {
+    const childStrMap = new Map();
+    this.child.forEach((factor) => {
+      let str = factor.value.toString();
+      let num = new BigInteger(1);
+      if (factor.value.type === 'Exponent' && factor.value.power.type === 'integer') {
+        str = factor.value.base.toString();
+        num = factor.value.power.compute().value;
+      }
+      const count = childStrMap.get(str);
+      if (count) {
+        childStrMap.set(str, count.add(num));
+        if (factor.type === 'multiply') {
+          childStrMap.set(str, count.add(num));
+        } else {
+          childStrMap.set(str, count.minus(num));
+        }
+      } else {
+        if (factor.type === 'multiply') {
+          childStrMap.set(str, num);
+        } else {
+          childStrMap.set(str, num.inverse());
+        }
+      }
+    });
+    const newChild = [];
+    this.child.forEach((factor) => {
+      let str = factor.value.toString();
+      let base = factor.value;
+      if (factor.value.type === 'Exponent' && factor.value.power.type === 'integer') {
+        str = factor.value.base.toString();
+        base = factor.value.base;
+      }
+
+      const count = childStrMap.get(str);
+      if (count.isZero()) {
+        return;
+      }
+      if (count.isEqual(1)) {
+        factor.type = 'multiply';
+        newChild.push(factor);
+      } else if (count.isEqual(-1)) {
+        factor.type = 'divide';
+        newChild.push(factor);
+      } else {
+        const result = new ExponentASTNode(base);
+        result.add(new IntegerASTNode(count.toString()));
+        factor.value = result;
+        factor.type = 'multiply';
+        newChild.push(factor);
+      }
+      childStrMap.set(str, new BigInteger(0));
+    });
+    this.child = newChild;
+  }
+
   getSimplify() {
     const factorChild = this.child?.filter(child => child.value.type === 'factor' && child.type === 'multiply');
     this.child = this.child?.filter(child => child.value.type !== 'factor' || child.type !== 'multiply');
@@ -539,6 +665,10 @@ class FactorASTNode extends ASTNode {
     if (zero.length > 0) {
       return new IntegerASTNode('0').compute();
     }
+    if (this.child.length === 0) {
+      return new IntegerASTNode('1').compute();
+    }
+    this.combine();
     if (this.child.length === 1 && this.child[0].type === 'multiply') {
       return this.child[0].value;
     }
@@ -603,6 +733,9 @@ class FactorASTNode extends ASTNode {
   }
 
   toString() {
+    if (this.strRaw) {
+      return this.strRaw;
+    }
     let result = this.child[0].value.toString();
     let hasMultiply = this.child[0].type === 'multiply';
     for (let i = 1; i < this.child.length; i++) {
@@ -622,7 +755,8 @@ class FactorASTNode extends ASTNode {
     if (hasMultiply === 0) {
       result = `(1 / ${result})`;
     }
-    return result;
+    this.strRaw = result;
+    return this.strRaw;
   }
 }
 
@@ -675,9 +809,13 @@ class ExponentASTNode extends ASTNode {
   }
 
   toString() {
+    if (this.strRaw) {
+      return this.strRaw;
+    }
     const base = this.base.toString();
     const power = this.power.toString();
-    return `${base} ^ ${power}`;
+    this.strRaw = `${base} ^ ${power}`;
+    return this.strRaw;
   }
   clone() {
     return new ExponentASTNode(this.base, this.power);
@@ -994,7 +1132,7 @@ class Lexical {
 const b = new Lexical();
 b.setSym('x');
 b.setSym('y');
-b.generateTokens('x^5+x*(y-1) + x*x*x');
+b.generateTokens('sin(x)*cos(x)');
 const ast2 = b.parse().ast;
 const result = ast2.compute();
 // console.info(result.derivative('x').toString());
