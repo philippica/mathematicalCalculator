@@ -1,9 +1,9 @@
-import { BigInteger } from './big-integer';
 import { IntegerASTNode } from './integer-ast-node';
 import { TermASTNode } from './term-ast-node';
 import { FactorASTNode } from './factor-ast-node';
 import { ExponentASTNode } from './exponent-ast-node';
 import { FunctionASTNode } from './function-ast-node';
+import { SymbolASTNode } from './symbol-ast-node';
 
 
 const LEX_STATE = {
@@ -27,47 +27,6 @@ class ParseResult {
     this.value = value;
   }
 }
-
-class ASTNode {
-  constructor(type, childNode, value) {
-    this.symbols = new Set();
-    this.child = childNode;
-    this.value = value;
-    this.type = type;
-  }
-}
-
-
-
-class SymbolASTNode extends ASTNode {
-  constructor(symbolName) {
-    super('symbol');
-    this.symbolName = symbolName;
-    this.symbols.add(symbolName);
-  }
-  compute() {
-    const ret = this.clone();
-    return ret;
-  }
-  toString() {
-    return this.symbolName;
-  }
-  clone() {
-    return new SymbolASTNode(this.symbolName);
-  }
-  derivative(symbol) {
-    let result;
-    if (this.symbolName === symbol) {
-      result = new IntegerASTNode('1');
-    } else {
-      result = new IntegerASTNode('0');
-    }
-    return result;
-  }
-}
-
-
-
 
 
 export class Lexical {
