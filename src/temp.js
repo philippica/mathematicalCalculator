@@ -36,19 +36,32 @@ class BigInteger {
       _numStr = _numStr.slice(1);
       this.positive = false;
     }
-    const numStr = this.trimLeadingZero(_numStr).split('.');
+    const trimLeadingZeroNum = this.trimLeadingZero(_numStr);
+    let i;
+    for (i = 0; i < trimLeadingZeroNum.length; i++) {
+      if (trimLeadingZeroNum[i] === '.') {
+        break;
+      }
+    }
+
+    const numStr = [trimLeadingZeroNum.slice(0, i)];
     this.rawDec = [];
     let numIndex = numStr[0].length - 1;
     let rawDecIndex = 0;
+    const digitStr = numStr[0];
     while (numIndex >= 0) {
       this.rawDec.push(0);
       rawDecIndex = this.rawDec.length - 1;
+      const compressDegree = BigInteger.compressDegree;
+      const base = BigInteger._base;
 
-      for (let i = BigInteger.compressDegree - 1; i >= 0; i--) {
-        this.rawDec[rawDecIndex] = this.rawDec[rawDecIndex] * BigInteger._base + parseInt(numStr[0][numIndex - i] ?? 0, BigInteger._base);
+      let result = 0;
+      for (i = compressDegree - 1; i >= 0; i--) {
+        result = result * base + parseInt(digitStr[numIndex - i] ?? 0, base);
       }
+      this.rawDec[rawDecIndex] = result;
 
-      numIndex -= BigInteger.compressDegree;
+      numIndex -= compressDegree;
     }
   }
 
@@ -71,7 +84,13 @@ class BigInteger {
   }
 
   trimLeadingZero(numStr) {
-    return numStr.replace(/^0+/, '');
+    let i = 0;
+    while (numStr[i] === '0') {
+      i++;
+    }
+    const ret = numStr.slice(i);
+    if (ret === '') return '0';
+    return numStr.slice(i);
   }
 
   toString() {
@@ -103,6 +122,7 @@ class BigInteger {
   }
 
   linearOp(_num, op, nextCarry, isSwap) {
+    const realBase = BigInteger.realBase;
     let carry = 0;
     let selfArray = this.rawDec;
     let anotherArray = _num.rawDec;
@@ -115,7 +135,7 @@ class BigInteger {
     for (let i = 0; i < selfArray.length || i < anotherArray.length; i++) {
       const segmentSelf = selfArray[i] ?? 0;
       const segmentAnother = anotherArray[i] ?? 0;
-      const segmentResult = (op(segmentSelf, segmentAnother, carry) + BigInteger.realBase) % BigInteger.realBase;
+      const segmentResult = (op(segmentSelf, segmentAnother, carry) + realBase) % realBase;
       result.push(segmentResult);
       carry = nextCarry(op(segmentSelf, segmentAnother, carry));
     }
@@ -159,7 +179,7 @@ class BigInteger {
       return this.add(num.inverse());
     }
 
-    const isSwap = !this.largerThan(_num);
+    const isSwap = !this.largerThan(num);
     const result = this.linearOp(num, (first, second, carry) => first - second - carry, numPara => (numPara < 0 ? 1 : 0), isSwap);
     if (isSwap) {
       result.positive = false;
@@ -175,6 +195,7 @@ class BigInteger {
     if (typeof (_num) === 'number' || typeof (_num) === 'string') {
       num = new BigInteger(_num);
     }
+    const base = BigInteger.realBase;
     const result = [];
     for (let i = 0; i < num.rawDec.length; i++) {
       for (let j = 0; j < this.rawDec.length; j++) {
@@ -182,8 +203,8 @@ class BigInteger {
           result.push(0);
         }
         const tempResult = result[i + j] + num.rawDec[i] * this.rawDec[j];
-        result[i + j] = tempResult % BigInteger.realBase;
-        const carry = parseInt(tempResult / BigInteger.realBase, 10);
+        result[i + j] = tempResult % base;
+        const carry = parseInt(tempResult / base, 10);
         if (carry) {
           if (result[i + j + 1] === undefined) {
             result.push(0);
@@ -197,6 +218,19 @@ class BigInteger {
     return ret;
   }
   divide(_num) {
+    const divideProcess = (base, number, a) => {
+      let ansDigit = 0;
+      while (true) {
+        const b = a.minus(base);
+        if (!b.positive && !b.isZero()) {
+          break;
+        }
+        ansDigit += number;
+        a = b;
+      }
+      return [ansDigit, a];
+    };
+
     let num = _num;
     if (typeof (_num) === 'number' || typeof (_num) === 'string') {
       num = new BigInteger(_num);
@@ -207,16 +241,30 @@ class BigInteger {
     }
     let a = new BigInteger(this.rawDec.slice(start));
     let ans = '';
+    const thousand = new BigInteger();
+    thousand.rawDec.push(1000);
+
+    const hundred = new BigInteger();
+    hundred.rawDec.push(100);
+
+    const ten = new BigInteger();
+    ten.rawDec.push(10);
+
     for (let i = start; i >= 0; i--) {
       let ansDigit = 0;
-      while (true) {
-        const b = a.minus(_num);
-        if (!b.positive && !b.isZero()) {
-          break;
-        }
-        ansDigit++;
-        a = b;
-      }
+      let [result, temp] = divideProcess(num.multiply(thousand), 1000, a);
+      ansDigit += result;
+      a = temp;
+      [result, temp] = divideProcess(num.multiply(hundred), 100, a);
+      ansDigit += result;
+      a = temp;
+      [result, temp] = divideProcess(num.multiply(ten), 10, a);
+      ansDigit += result;
+      a = temp;
+      [result, temp] = divideProcess(num, 1, a);
+      ansDigit += result;
+      a = temp;
+
       let ansDigitStr = ansDigit.toString();
       while (ansDigitStr.length < BigInteger.compressDegree) {
         ansDigitStr = `0${ansDigitStr}`;
@@ -489,7 +537,10 @@ class TermASTNode extends ASTNode {
     this.combine();
 
     if (this.child.length === 1) {
-      return this.child[0].value;
+      if (this.child[0].type === 'add') {
+        return this.child[0].value;
+      }
+      return new UnaryASTNode('negative', this.child[0].value);
     }
     if (this.child.length === 0) {
       return new IntegerASTNode('0').compute();
@@ -538,6 +589,7 @@ class TermASTNode extends ASTNode {
       ret.add('add', integerAdd);
     } else {
       integerAdd.value.positive = true;
+      integerAdd.obj = integerAdd.value.toString();
       ret.add('minus', integerAdd);
     }
     incomputableAddList.forEach((x) => {
@@ -647,11 +699,9 @@ class FactorASTNode extends ASTNode {
         return;
       }
       if (count.isEqual(1)) {
-        factor.type = 'multiply';
-        newChild.push(factor);
+        newChild.push({ type: 'multiply', value: base });
       } else if (count.isEqual(-1)) {
-        factor.type = 'divide';
-        newChild.push(factor);
+        newChild.push({ type: 'divide', value: base });
       } else {
         const result = new ExponentASTNode(base);
         result.add(new IntegerASTNode(count.toString()));
@@ -754,13 +804,42 @@ class FactorASTNode extends ASTNode {
     return ret.getSimplify();
   }
   derivative(symbol) {
-    const ret = new TermASTNode();
-    for (let i = 0; i < this.child.length; i++) {
-      const term = this.clone();
+    const multiplyList = this.child.filter(x => x.type === 'multiply').map(x => x.value.compute());
+    const divideList = this.child.filter(x => x.type === 'divide').map(x => x.value.compute());
+    let numeratorDerivative = new TermASTNode();
+    let numerator = new FactorASTNode();
+    multiplyList.forEach((element) => {
+      numerator.add('multiply', element);
+    });
+    numerator = numerator.getSimplify();
+    for (let i = 0; i < multiplyList.length; i++) {
+      const term = numerator.clone();
       term.child[i].value = term.child[i].value.derivative(symbol);
-      ret.add('add', term);
+      numeratorDerivative.add('add', term);
     }
-    return ret.getSimplify();
+    numeratorDerivative = numeratorDerivative.getSimplify();
+    if (divideList.length === 0) {
+      return numeratorDerivative;
+    }
+
+    let denominator = new FactorASTNode();
+    divideList.forEach((element) => {
+      denominator.add('multiply', element);
+    });
+    denominator = denominator.getSimplify();
+
+    const denominatorDerivative = denominator.derivative(symbol);
+    const a = new FactorASTNode(numeratorDerivative);
+    a.add('multiply', denominator);
+    const b = new FactorASTNode(denominatorDerivative);
+    b.add('multiply', numerator);
+    const c = new TermASTNode(a);
+    c.add('minus', b);
+
+    const d = new ExponentASTNode(denominator.clone(), new IntegerASTNode('2'));
+    const result = new FactorASTNode(c);
+    result.add('divide', d);
+    return result.getSimplify();
   }
   clone() {
     const ret = new FactorASTNode();
@@ -774,25 +853,27 @@ class FactorASTNode extends ASTNode {
     if (this.strRaw) {
       return this.strRaw;
     }
-    let result = this.child[0].value.toString();
-    let hasMultiply = this.child[0].type === 'multiply';
-    for (let i = 1; i < this.child.length; i++) {
-      const another = this.child[i].value.toString();
-      switch (this.child[i].type) {
-        case 'multiply':
-          result += ` * ${another}`;
-          hasMultiply = 1;
-          break;
-        case 'divide':
-          result += ` / ${another}`;
-          break;
-        default:
-          break;
+    const multiplyList = this.child.filter(x => x.type === 'multiply');
+    const divideList = this.child.filter(x => x.type === 'divide');
+    let result;
+    if (multiplyList.length === 0) {
+      result = '1 / ';
+      for (let i = 0; i < divideList.length; i++) {
+        result += ` / ${divideList[i].value.toString()}`;
       }
+      return result;
     }
-    if (hasMultiply === 0) {
-      result = `(1 / ${result})`;
+
+    result = multiplyList[0].value.toString();
+    for (let i = 1; i < multiplyList.length; i++) {
+      const factor = multiplyList[i].value.toString();
+      result = `${result} * ${factor}`;
     }
+    for (let i = 0; i < divideList.length; i++) {
+      const factor = divideList[i].value.toString();
+      result = `${result} / ${factor}`;
+    }
+
     this.strRaw = result;
     return this.strRaw;
   }
@@ -850,8 +931,14 @@ class ExponentASTNode extends ASTNode {
     if (this.strRaw) {
       return this.strRaw;
     }
-    const base = this.base.toString();
-    const power = this.power.toString();
+    let base = this.base.toString();
+    let power = this.power.toString();
+    if (this.base.type === 'Exponent' || this.base.type === 'factor') {
+      base = `(${base})`;
+    }
+    if (this.power.type === 'Exponent' || this.power.type === 'factor') {
+      power = `(${power})`;
+    }
     this.strRaw = `${base} ^ ${power}`;
     return this.strRaw;
   }
@@ -859,6 +946,9 @@ class ExponentASTNode extends ASTNode {
     return new ExponentASTNode(this.base, this.power);
   }
   derivative(symbol) {
+    if (!this.base.symbols.has(symbol) && !this.power.symbols.has(symbol)) {
+      return new IntegerASTNode('1');
+    }
     if (!this.power.symbols.has(symbol)) {
       const result = new FactorASTNode();
       result.add('multiply', this.power.clone());
@@ -867,6 +957,18 @@ class ExponentASTNode extends ASTNode {
       result.add('multiply', new ExponentASTNode(this.base, minusOne));
       return result;
     }
+    if (!this.base.symbols.has(symbol)) {
+      const result = new FactorASTNode();
+      result.add('multiply', this.power.derivative('x'));
+      result.add('multiply', this.clone());
+      result.add('multiply', new FunctionASTNode('ln', this.base.compute()));
+      return result;
+    }
+    const result = new FactorASTNode(this.clone());
+    const rightPart = new FactorASTNode(this.power.clone());
+    rightPart.add('multiply', new FunctionASTNode('ln', this.base.compute()));
+    result.add('multiply', rightPart.derivative('x'));
+    return result;
   }
 }
 
@@ -1170,7 +1272,7 @@ class Lexical {
 const b = new Lexical();
 b.setSym('x');
 b.setSym('y');
-b.generateTokens('sin(x)*cos(x)*x');
+b.generateTokens('ln(x^5)');
 const ast2 = b.parse().ast;
 const result = ast2.compute();
 // console.info(result.derivative('x').toString());
