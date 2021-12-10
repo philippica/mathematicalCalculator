@@ -3,6 +3,7 @@ import { IntegerASTNode } from "./integer-ast-node";
 import { BigInteger } from "./big-integer";
 import { FactorASTNode } from "./factor-ast-node";
 import { TermASTNode } from "./term-ast-node";
+import { FunctionASTNode } from "./function-ast-node";
 
 export class ExponentASTNode extends ASTNode {
     constructor(base, power) {
