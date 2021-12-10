@@ -36,19 +36,32 @@ export class BigInteger {
       _numStr = _numStr.slice(1);
       this.positive = false;
     }
-    const numStr = this.trimLeadingZero(_numStr).split('.');
+    const trimLeadingZeroNum = this.trimLeadingZero(_numStr);
+    let i;
+    for (i = 0; i < trimLeadingZeroNum.length; i++) {
+      if (trimLeadingZeroNum[i] === '.') {
+        break;
+      }
+    }
+
+    const numStr = [trimLeadingZeroNum.slice(0, i)];
     this.rawDec = [];
     let numIndex = numStr[0].length - 1;
     let rawDecIndex = 0;
+    const digitStr = numStr[0];
     while (numIndex >= 0) {
       this.rawDec.push(0);
       rawDecIndex = this.rawDec.length - 1;
+      const compressDegree = BigInteger.compressDegree;
+      const base = BigInteger._base;
 
-      for (let i = BigInteger.compressDegree - 1; i >= 0; i--) {
-        this.rawDec[rawDecIndex] = this.rawDec[rawDecIndex] * BigInteger._base + parseInt(numStr[0][numIndex - i] ?? 0, BigInteger._base);
+      let result = 0;
+      for (i = compressDegree - 1; i >= 0; i--) {
+        result = result * base + parseInt(digitStr[numIndex - i] ?? 0, base);
       }
+      this.rawDec[rawDecIndex] = result;
 
-      numIndex -= BigInteger.compressDegree;
+      numIndex -= compressDegree;
     }
   }
 
@@ -71,7 +84,13 @@ export class BigInteger {
   }
 
   trimLeadingZero(numStr) {
-    return numStr.replace(/^0+/, '');
+    let i = 0;
+    while (numStr[i] === '0') {
+      i++;
+    }
+    const ret = numStr.slice(i);
+    if (ret === '') return '0';
+    return numStr.slice(i);
   }
 
   toString() {
@@ -103,6 +122,7 @@ export class BigInteger {
   }
 
   linearOp(_num, op, nextCarry, isSwap) {
+    const realBase = BigInteger.realBase;
     let carry = 0;
     let selfArray = this.rawDec;
     let anotherArray = _num.rawDec;
@@ -115,7 +135,7 @@ export class BigInteger {
     for (let i = 0; i < selfArray.length || i < anotherArray.length; i++) {
       const segmentSelf = selfArray[i] ?? 0;
       const segmentAnother = anotherArray[i] ?? 0;
-      const segmentResult = (op(segmentSelf, segmentAnother, carry) + BigInteger.realBase) % BigInteger.realBase;
+      const segmentResult = (op(segmentSelf, segmentAnother, carry) + realBase) % realBase;
       result.push(segmentResult);
       carry = nextCarry(op(segmentSelf, segmentAnother, carry));
     }
@@ -159,7 +179,7 @@ export class BigInteger {
       return this.add(num.inverse());
     }
 
-    const isSwap = !this.largerThan(_num);
+    const isSwap = !this.largerThan(num);
     const result = this.linearOp(num, (first, second, carry) => first - second - carry, numPara => (numPara < 0 ? 1 : 0), isSwap);
     if (isSwap) {
       result.positive = false;
@@ -175,6 +195,7 @@ export class BigInteger {
     if (typeof (_num) === 'number' || typeof (_num) === 'string') {
       num = new BigInteger(_num);
     }
+    const base = BigInteger.realBase;
     const result = [];
     for (let i = 0; i < num.rawDec.length; i++) {
       for (let j = 0; j < this.rawDec.length; j++) {
@@ -182,8 +203,8 @@ export class BigInteger {
           result.push(0);
         }
         const tempResult = result[i + j] + num.rawDec[i] * this.rawDec[j];
-        result[i + j] = tempResult % BigInteger.realBase;
-        const carry = parseInt(tempResult / BigInteger.realBase, 10);
+        result[i + j] = tempResult % base;
+        const carry = parseInt(tempResult / base, 10);
         if (carry) {
           if (result[i + j + 1] === undefined) {
             result.push(0);
@@ -197,6 +218,19 @@ export class BigInteger {
     return ret;
   }
   divide(_num) {
+    const divideProcess = (base, number, a) => {
+      let ansDigit = 0;
+      while (true) {
+        const b = a.minus(base);
+        if (!b.positive && !b.isZero()) {
+          break;
+        }
+        ansDigit += number;
+        a = b;
+      }
+      return [ansDigit, a];
+    };
+
     let num = _num;
     if (typeof (_num) === 'number' || typeof (_num) === 'string') {
       num = new BigInteger(_num);
@@ -207,16 +241,30 @@ export class BigInteger {
     }
     let a = new BigInteger(this.rawDec.slice(start));
     let ans = '';
+    const thousand = new BigInteger();
+    thousand.rawDec.push(1000);
+
+    const hundred = new BigInteger();
+    hundred.rawDec.push(100);
+
+    const ten = new BigInteger();
+    ten.rawDec.push(10);
+
     for (let i = start; i >= 0; i--) {
       let ansDigit = 0;
-      while (true) {
-        const b = a.minus(_num);
-        if (!b.positive && !b.isZero()) {
-          break;
-        }
-        ansDigit++;
-        a = b;
-      }
+      let [result, temp] = divideProcess(num.multiply(thousand), 1000, a);
+      ansDigit += result;
+      a = temp;
+      [result, temp] = divideProcess(num.multiply(hundred), 100, a);
+      ansDigit += result;
+      a = temp;
+      [result, temp] = divideProcess(num.multiply(ten), 10, a);
+      ansDigit += result;
+      a = temp;
+      [result, temp] = divideProcess(num, 1, a);
+      ansDigit += result;
+      a = temp;
+
       let ansDigitStr = ansDigit.toString();
       while (ansDigitStr.length < BigInteger.compressDegree) {
         ansDigitStr = `0${ansDigitStr}`;

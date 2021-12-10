@@ -79,7 +79,10 @@ export class TermASTNode extends ASTNode {
       this.combine();
   
       if (this.child.length === 1) {
-        return this.child[0].value;
+        if (this.child[0].type === 'add') {
+          return this.child[0].value;
+        }
+        return new UnaryASTNode('negative', this.child[0].value);
       }
       if (this.child.length === 0) {
         return new IntegerASTNode('0').compute();
@@ -128,6 +131,7 @@ export class TermASTNode extends ASTNode {
         ret.add('add', integerAdd);
       } else {
         integerAdd.value.positive = true;
+        integerAdd.obj = integerAdd.value.toString();
         ret.add('minus', integerAdd);
       }
       incomputableAddList.forEach((x) => {

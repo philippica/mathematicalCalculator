@@ -55,11 +55,9 @@ export class FactorASTNode extends ASTNode {
           return;
         }
         if (count.isEqual(1)) {
-          factor.type = 'multiply';
-          newChild.push(factor);
+          newChild.push({ type: 'multiply', value: base });
         } else if (count.isEqual(-1)) {
-          factor.type = 'divide';
-          newChild.push(factor);
+          newChild.push({ type: 'divide', value: base });
         } else {
           const result = new ExponentASTNode(base);
           result.add(new IntegerASTNode(count.toString()));
@@ -162,13 +160,42 @@ export class FactorASTNode extends ASTNode {
       return ret.getSimplify();
     }
     derivative(symbol) {
-      const ret = new TermASTNode();
-      for (let i = 0; i < this.child.length; i++) {
-        const term = this.clone();
+      const multiplyList = this.child.filter(x => x.type === 'multiply').map(x => x.value.compute());
+      const divideList = this.child.filter(x => x.type === 'divide').map(x => x.value.compute());
+      let numeratorDerivative = new TermASTNode();
+      let numerator = new FactorASTNode();
+      multiplyList.forEach((element) => {
+        numerator.add('multiply', element);
+      });
+      numerator = numerator.getSimplify();
+      for (let i = 0; i < multiplyList.length; i++) {
+        const term = numerator.clone();
         term.child[i].value = term.child[i].value.derivative(symbol);
-        ret.add('add', term);
+        numeratorDerivative.add('add', term);
       }
-      return ret.getSimplify();
+      numeratorDerivative = numeratorDerivative.getSimplify();
+      if (divideList.length === 0) {
+        return numeratorDerivative;
+      }
+  
+      let denominator = new FactorASTNode();
+      divideList.forEach((element) => {
+        denominator.add('multiply', element);
+      });
+      denominator = denominator.getSimplify();
+  
+      const denominatorDerivative = denominator.derivative(symbol);
+      const a = new FactorASTNode(numeratorDerivative);
+      a.add('multiply', denominator);
+      const b = new FactorASTNode(denominatorDerivative);
+      b.add('multiply', numerator);
+      const c = new TermASTNode(a);
+      c.add('minus', b);
+  
+      const d = new ExponentASTNode(denominator.clone(), new IntegerASTNode('2'));
+      const result = new FactorASTNode(c);
+      result.add('divide', d);
+      return result.getSimplify();
     }
     clone() {
       const ret = new FactorASTNode();
@@ -182,25 +209,27 @@ export class FactorASTNode extends ASTNode {
       if (this.strRaw) {
         return this.strRaw;
       }
-      let result = this.child[0].value.toString();
-      let hasMultiply = this.child[0].type === 'multiply';
-      for (let i = 1; i < this.child.length; i++) {
-        const another = this.child[i].value.toString();
-        switch (this.child[i].type) {
-          case 'multiply':
-            result += ` * ${another}`;
-            hasMultiply = 1;
-            break;
-          case 'divide':
-            result += ` / ${another}`;
-            break;
-          default:
-            break;
+      const multiplyList = this.child.filter(x => x.type === 'multiply');
+      const divideList = this.child.filter(x => x.type === 'divide');
+      let result;
+      if (multiplyList.length === 0) {
+        result = '1 / ';
+        for (let i = 0; i < divideList.length; i++) {
+          result += ` / ${divideList[i].value.toString()}`;
         }
+        return result;
       }
-      if (hasMultiply === 0) {
-        result = `(1 / ${result})`;
+  
+      result = multiplyList[0].value.toString();
+      for (let i = 1; i < multiplyList.length; i++) {
+        const factor = multiplyList[i].value.toString();
+        result = `${result} * ${factor}`;
       }
+      for (let i = 0; i < divideList.length; i++) {
+        const factor = divideList[i].value.toString();
+        result = `${result} / ${factor}`;
+      }
+  
       this.strRaw = result;
       return this.strRaw;
     }

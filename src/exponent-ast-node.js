@@ -56,8 +56,14 @@ export class ExponentASTNode extends ASTNode {
       if (this.strRaw) {
         return this.strRaw;
       }
-      const base = this.base.toString();
-      const power = this.power.toString();
+      let base = this.base.toString();
+      let power = this.power.toString();
+      if (this.base.type === 'Exponent' || this.base.type === 'factor') {
+        base = `(${base})`;
+      }
+      if (this.power.type === 'Exponent' || this.power.type === 'factor') {
+        power = `(${power})`;
+      }
       this.strRaw = `${base} ^ ${power}`;
       return this.strRaw;
     }
@@ -65,6 +71,9 @@ export class ExponentASTNode extends ASTNode {
       return new ExponentASTNode(this.base, this.power);
     }
     derivative(symbol) {
+      if (!this.base.symbols.has(symbol) && !this.power.symbols.has(symbol)) {
+        return new IntegerASTNode('1');
+      }
       if (!this.power.symbols.has(symbol)) {
         const result = new FactorASTNode();
         result.add('multiply', this.power.clone());
@@ -73,5 +82,17 @@ export class ExponentASTNode extends ASTNode {
         result.add('multiply', new ExponentASTNode(this.base, minusOne));
         return result;
       }
+      if (!this.base.symbols.has(symbol)) {
+        const result = new FactorASTNode();
+        result.add('multiply', this.power.derivative('x'));
+        result.add('multiply', this.clone());
+        result.add('multiply', new FunctionASTNode('ln', this.base.compute()));
+        return result;
+      }
+      const result = new FactorASTNode(this.clone());
+      const rightPart = new FactorASTNode(this.power.clone());
+      rightPart.add('multiply', new FunctionASTNode('ln', this.base.compute()));
+      result.add('multiply', rightPart.derivative('x'));
+      return result;
     }
   }
