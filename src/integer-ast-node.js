@@ -16,6 +16,12 @@ export class IntegerASTNode extends ASTNode {
       return ret;
     }
     toString() {
+      if (!this.value) {
+        this.value = new BigInteger(this.obj);
+      }
+      if (this.value.positive === false && !this.value.isZero()) {
+        return `(${this.obj})`;
+      }
       return this.obj;
     }
     clone() {
@@ -25,4 +31,4 @@ export class IntegerASTNode extends ASTNode {
       const result = new IntegerASTNode('0');
       return result;
     }
-  }
+}

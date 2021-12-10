@@ -50,7 +50,7 @@ export class ExponentASTNode extends ASTNode {
       for (const element of power.symbols) {
         ret.symbols.add(element);
       }
-      return ret;
+      return ret.getSimplify();
     }
   
     toString() {
@@ -94,6 +94,6 @@ export class ExponentASTNode extends ASTNode {
       const rightPart = new FactorASTNode(this.power.clone());
       rightPart.add('multiply', new FunctionASTNode('ln', this.base.compute()));
       result.add('multiply', rightPart.derivative('x'));
-      return result;
+      return result.compute();
     }
   }

@@ -9,10 +9,42 @@ export class FunctionASTNode extends ASTNode {
       this.parameter = parameter;
       this.functionName = functionName;
     }
+    getSimplify() {
+      let ret = this;
+      switch (this.functionName) {
+        case 'sin':
+          if (this.parameter.type === 'negative') {
+            ret = new FunctionASTNode('sin', this.parameter.child);
+            ret.symbols = this.symbols;
+            ret = new UnaryASTNode('negative', ret);
+            ret.symbols = this.symbols;
+          }
+          break;
+        case 'exp':
+          break;
+        case 'cos':
+          if (this.parameter.type === 'negative') {
+            this.parameter = this.parameter.child;
+          }
+          break;
+        case 'ln':
+          if (this.parameter.type === 'Exponent') {
+            ret = new FactorASTNode(this.parameter.power);
+            const rightPart = new FunctionASTNode('ln', this.parameter.base);
+            ret.add('multiply', rightPart);
+          }
+          break;
+        default:
+      }
+      return ret;
+    }
     compute() {
       const ret = this.clone();
       ret.parameter = ret.parameter.compute();
-      return ret;
+      for (const element of this.parameter.symbols) {
+        ret.symbols.add(element);
+      }
+      return ret.getSimplify();
     }
     clone() {
       const ret = new FunctionASTNode(this.functionName, this.parameter.clone());
@@ -20,7 +52,7 @@ export class FunctionASTNode extends ASTNode {
     }
     toString() {
       let ret;
-      if (this.parameter.type === 'term') {
+      if (this.parameter.type === 'term' || this.parameter.type === 'negative') {
         ret = `${this.functionName}${this.parameter.toString()}`;
       } else {
         ret = `${this.functionName}(${this.parameter.toString()})`;
@@ -59,4 +91,3 @@ export class FunctionASTNode extends ASTNode {
       return ret;
     }
   }
-  

@@ -115,6 +115,12 @@ export class FactorASTNode extends ASTNode {
           child.value = child.value.child;
         }
       });
+      this.child = this.child?.filter((child) => {
+        if (child.value.type === 'integer') {
+          return child.value?.obj !== '1';
+        }
+        return true;
+      });
       if (negativeCount & 1) {
         return new UnaryASTNode('negative', this);
       }
@@ -167,24 +173,28 @@ export class FactorASTNode extends ASTNode {
       multiplyList.forEach((element) => {
         numerator.add('multiply', element);
       });
-      numerator = numerator.getSimplify();
-      for (let i = 0; i < multiplyList.length; i++) {
-        const term = numerator.clone();
-        term.child[i].value = term.child[i].value.derivative(symbol);
-        numeratorDerivative.add('add', term);
+      numerator = numerator.compute();
+      if (numerator.type !== 'factor') {
+        numeratorDerivative = numerator.derivative('x').compute();
+      } else {
+        for (let i = 0; i < multiplyList.length; i++) {
+          const term = numerator.clone();
+          term.child[i].value = term.child[i].value.derivative(symbol).compute();
+          numeratorDerivative.add('add', term);
+        }
       }
-      numeratorDerivative = numeratorDerivative.getSimplify();
+      numeratorDerivative = numeratorDerivative.compute();
       if (divideList.length === 0) {
-        return numeratorDerivative;
+        return numeratorDerivative.compute();
       }
   
       let denominator = new FactorASTNode();
       divideList.forEach((element) => {
         denominator.add('multiply', element);
       });
-      denominator = denominator.getSimplify();
+      denominator = denominator.compute();
   
-      const denominatorDerivative = denominator.derivative(symbol);
+      const denominatorDerivative = denominator.derivative(symbol).compute();
       const a = new FactorASTNode(numeratorDerivative);
       a.add('multiply', denominator);
       const b = new FactorASTNode(denominatorDerivative);
@@ -193,9 +203,9 @@ export class FactorASTNode extends ASTNode {
       c.add('minus', b);
   
       const d = new ExponentASTNode(denominator.clone(), new IntegerASTNode('2'));
-      const result = new FactorASTNode(c);
-      result.add('divide', d);
-      return result.getSimplify();
+      const result = new FactorASTNode(c.compute());
+      result.add('divide', d.compute());
+      return result.compute();
     }
     clone() {
       const ret = new FactorASTNode();
