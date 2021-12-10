@@ -378,6 +378,12 @@ class IntegerASTNode extends ASTNode {
     return ret;
   }
   toString() {
+    if (!this.value) {
+      this.value = new BigInteger(this.obj);
+    }
+    if (this.value.positive === false && !this.value.isZero()) {
+      return `(${this.obj})`;
+    }
     return this.obj;
   }
   clone() {
@@ -759,6 +765,12 @@ class FactorASTNode extends ASTNode {
         child.value = child.value.child;
       }
     });
+    this.child = this.child?.filter((child) => {
+      if (child.value.type === 'integer') {
+        return child.value?.obj !== '1';
+      }
+      return true;
+    });
     if (negativeCount & 1) {
       return new UnaryASTNode('negative', this);
     }
@@ -811,24 +823,28 @@ class FactorASTNode extends ASTNode {
     multiplyList.forEach((element) => {
       numerator.add('multiply', element);
     });
-    numerator = numerator.getSimplify();
-    for (let i = 0; i < multiplyList.length; i++) {
-      const term = numerator.clone();
-      term.child[i].value = term.child[i].value.derivative(symbol);
-      numeratorDerivative.add('add', term);
+    numerator = numerator.compute();
+    if (numerator.type !== 'factor') {
+      numeratorDerivative = numerator.derivative('x').compute();
+    } else {
+      for (let i = 0; i < multiplyList.length; i++) {
+        const term = numerator.clone();
+        term.child[i].value = term.child[i].value.derivative(symbol).compute();
+        numeratorDerivative.add('add', term);
+      }
     }
-    numeratorDerivative = numeratorDerivative.getSimplify();
+    numeratorDerivative = numeratorDerivative.compute();
     if (divideList.length === 0) {
-      return numeratorDerivative;
+      return numeratorDerivative.compute();
     }
 
     let denominator = new FactorASTNode();
     divideList.forEach((element) => {
       denominator.add('multiply', element);
     });
-    denominator = denominator.getSimplify();
+    denominator = denominator.compute();
 
-    const denominatorDerivative = denominator.derivative(symbol);
+    const denominatorDerivative = denominator.derivative(symbol).compute();
     const a = new FactorASTNode(numeratorDerivative);
     a.add('multiply', denominator);
     const b = new FactorASTNode(denominatorDerivative);
@@ -837,9 +853,9 @@ class FactorASTNode extends ASTNode {
     c.add('minus', b);
 
     const d = new ExponentASTNode(denominator.clone(), new IntegerASTNode('2'));
-    const result = new FactorASTNode(c);
-    result.add('divide', d);
-    return result.getSimplify();
+    const result = new FactorASTNode(c.compute());
+    result.add('divide', d.compute());
+    return result.compute();
   }
   clone() {
     const ret = new FactorASTNode();
@@ -924,7 +940,7 @@ class ExponentASTNode extends ASTNode {
     for (const element of power.symbols) {
       ret.symbols.add(element);
     }
-    return ret;
+    return ret.getSimplify();
   }
 
   toString() {
@@ -968,7 +984,7 @@ class ExponentASTNode extends ASTNode {
     const rightPart = new FactorASTNode(this.power.clone());
     rightPart.add('multiply', new FunctionASTNode('ln', this.base.compute()));
     result.add('multiply', rightPart.derivative('x'));
-    return result;
+    return result.compute();
   }
 }
 
@@ -978,10 +994,42 @@ class FunctionASTNode extends ASTNode {
     this.parameter = parameter;
     this.functionName = functionName;
   }
+  getSimplify() {
+    let ret = this;
+    switch (this.functionName) {
+      case 'sin':
+        if (this.parameter.type === 'negative') {
+          ret = new FunctionASTNode('sin', this.parameter.child);
+          ret.symbols = this.symbols;
+          ret = new UnaryASTNode('negative', ret);
+          ret.symbols = this.symbols;
+        }
+        break;
+      case 'exp':
+        break;
+      case 'cos':
+        if (this.parameter.type === 'negative') {
+          this.parameter = this.parameter.child;
+        }
+        break;
+      case 'ln':
+        if (this.parameter.type === 'Exponent') {
+          ret = new FactorASTNode(this.parameter.power);
+          const rightPart = new FunctionASTNode('ln', this.parameter.base);
+          ret.add('multiply', rightPart);
+        }
+        break;
+      default:
+    }
+    return ret;
+  }
   compute() {
     const ret = this.clone();
     ret.parameter = ret.parameter.compute();
-    return ret;
+    for (const element of this.parameter.symbols) {
+      ret.symbols.add(element);
+    }
+    return ret.getSimplify();
   }
   clone() {
     const ret = new FunctionASTNode(this.functionName, this.parameter.clone());
@@ -989,7 +1037,7 @@ class FunctionASTNode extends ASTNode {
   }
   toString() {
     let ret;
-    if (this.parameter.type === 'term') {
+    if (this.parameter.type === 'term' || this.parameter.type === 'negative') {
       ret = `${this.functionName}${this.parameter.toString()}`;
     } else {
       ret = `${this.functionName}(${this.parameter.toString()})`;
@@ -1267,6 +1315,7 @@ class Lexical {
     return result;
   }
 }
+
 
 
 const b = new Lexical();
