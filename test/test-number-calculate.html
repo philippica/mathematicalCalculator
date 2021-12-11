@@ -1,0 +1,34 @@
+<html>
+    <head>
+        <script src='../dist/js/index.js'></script>
+        <style>
+            #correct {
+                color: green;
+            }
+            #incorrect {
+                color: red;
+            }
+        </style>
+        <script>
+            const compute = (expression, expectation) => {
+                const b = new mathematica.Lexical();
+                b.generateTokens(expression);
+                const ast2 = b.parse().ast;
+                const result = ast2.compute().toString();
+                if(result !== expectation) {
+                    return `test ${expression} = ${result} <span id="incorrect">incorrect</span>, expect ${expectation}`
+                }
+                return `test ${expression} = ${result} <span id="correct">correct</span>`;
+            }
+            // document.write(`<div>${compute("273482478*283479", "77526539380962")}</div>`);
+            // document.write(`<div>${compute("(23478279347*672364)*2673482+239482938+23847832+29837489237489213748923748932489237-28347832974*28347923784", "29837489237530613599398109088610847")}</div>`);
+            // document.write(`<div>${compute("2^1000+23423432*23489", "10715086071862673209484250490600018105614048117055336074437503883703510511249361224931983788156958581275946729175531468251871452856923140435984577574698574803934567774824230985421074605062371141877954182153046474983581941267398767559165543946077062914571196477686542167660429831652624386837755861063624")}</div>`);
+            document.write(`<div>${compute("(1+1*1*0*1*(-1)-(-1)*(-1))*1", "0")}</div>`);
+            document.write(`<div>${compute("273482478*0", "0")}</div>`);
+            document.write(`<div>${compute("273482478*0", "0")}</div>`);
+        </script>
+    </head>
+    <body>
+        <div id="result"></div>
+    </body>
+</html>

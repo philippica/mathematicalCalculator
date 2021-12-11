@@ -1,6 +1,7 @@
 import { ASTNode } from "./ast-node";
 import { FactorASTNode } from "./factor-ast-node";
 import { IntegerASTNode } from "./integer-ast-node";
+import { UnaryASTNode } from "./unary-ast-node";
 
 export class TermASTNode extends ASTNode {
     constructor(value) {
@@ -110,20 +111,20 @@ export class TermASTNode extends ASTNode {
   
       const incomputableMinusList = minusList.filter(x => x.type !== 'integer');
       const integerMinus = minusList.filter(x => x.type === 'integer').reduce((x, y) => {
-        const result = x.value.add(y.value);
+        const result = x.value.add(y.compute().value);
         const _ret = new IntegerASTNode(result.toString());
         _ret.value = result;
-        return _ret;
+        return _ret.compute();
       }, new IntegerASTNode('0').compute());
   
       integerMinus.value.positive = !integerMinus.value.positive;
   
       const incomputableAddList = addList.filter(x => x.type !== 'integer');
       const integerAdd = addList.filter(x => x.type === 'integer').reduce((x, y) => {
-        const result = x.value.add(y.value);
+        const result = x.value.add(y.compute().value);
         const _ret = new IntegerASTNode(result.toString());
         _ret.value = result;
-        return _ret;
+        return _ret.compute();
       }, integerMinus);
   
   
@@ -149,6 +150,7 @@ export class TermASTNode extends ASTNode {
       });
       return ret.getSimplify();
     }
+    
     toString() {
       if (this.strRaw) {
         return this.strRaw;

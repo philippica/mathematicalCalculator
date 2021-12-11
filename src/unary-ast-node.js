@@ -16,7 +16,15 @@ export class UnaryASTNode extends ASTNode {
     }
   
     compute() {
-      const temp = this.child.compute();
+      let temp = this.child.compute();
+      if (temp.type === 'integer') {
+        temp = temp.compute();
+        if(this.type === 'negative') {
+            temp.value.positive = !temp.value.positive;
+            temp.obj = temp.value.toString();
+        }
+        return temp;
+      }
       const ret = new UnaryASTNode(this.type, temp);
       for (const element of temp.symbols) {
         ret.symbols.add(element);
