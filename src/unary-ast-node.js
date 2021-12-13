@@ -19,9 +19,9 @@ export class UnaryASTNode extends ASTNode {
       let temp = this.child.compute();
       if (temp.type === 'integer') {
         temp = temp.compute();
-        if(this.type === 'negative') {
-            temp.value.positive = !temp.value.positive;
-            temp.obj = temp.value.toString();
+        if (this.type === 'negative') {
+          temp.value.positive = !temp.value.positive;
+          temp.obj = temp.value.toString();
         }
         return temp;
       }
@@ -31,7 +31,7 @@ export class UnaryASTNode extends ASTNode {
       }
       return ret.getSimplify();
     }
-    toString() {
+    toString(isNeededBracket) {
       if (this.strRaw) {
         return this.strRaw;
       }
@@ -39,7 +39,10 @@ export class UnaryASTNode extends ASTNode {
       if (this.type === 'positive') {
         this.strRaw = `+${temp}`;
       } else if (this.type === 'negative') {
-        this.strRaw = `(-${temp})`;
+        this.strRaw = `-${temp}`;
+      }
+      if (isNeededBracket) {
+        return `(${this.strRaw})`;
       }
       return this.strRaw;
     }

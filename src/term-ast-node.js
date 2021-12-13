@@ -150,7 +150,7 @@ export class TermASTNode extends ASTNode {
       });
       return ret.getSimplify();
     }
-    
+  
     toString() {
       if (this.strRaw) {
         return this.strRaw;

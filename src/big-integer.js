@@ -197,24 +197,28 @@ export class BigInteger {
     }
     const base = BigInteger.realBase;
     const result = [];
-    for (let i = 0; i < num.rawDec.length; i++) {
-      for (let j = 0; j < this.rawDec.length; j++) {
-        if (result[i + j] === undefined) {
-          result.push(0);
-        }
-        const tempResult = result[i + j] + num.rawDec[i] * this.rawDec[j];
+    const anotherLen = num.rawDec.length;
+    const selfLen = this.rawDec.length;
+    const product = anotherLen + selfLen + 1;
+    for (let i = 1; i <= product; i++) {
+      result.push(0);
+    }
+    for (let i = 0; i < anotherLen; i++) {
+      for (let j = 0; j < selfLen; j++) {
+        let currentResult = result[i + j];
+        const tempResult = currentResult + num.rawDec[i] * this.rawDec[j];
         result[i + j] = tempResult % base;
         const carry = parseInt(tempResult / base, 10);
         if (carry) {
-          if (result[i + j + 1] === undefined) {
-            result.push(0);
-          }
           result[i + j + 1] += carry;
         }
       }
     }
     const ret = new BigInteger(result);
     ret.positive = !(this.positive ^ num.positive);
+    while (ret.rawDec[ret.rawDec.length - 1] === 0 && ret.rawDec.length > 1) {
+      ret.rawDec.pop();
+    }
     return ret;
   }
   divide(_num) {

@@ -40,6 +40,11 @@ export class ExponentASTNode extends ASTNode {
         let result = new BigInteger(1);
         if (power.value.positive) {
           result = this.quickPower(base.value, power.value);
+        } else {
+          const ret = new FactorASTNode();
+          result = this.quickPower(base.value, power.value.inverse());
+          ret.add('divide', new IntegerASTNode(result.toString()));
+          return ret;
         }
         return new IntegerASTNode(result.toString());
       }
@@ -57,8 +62,8 @@ export class ExponentASTNode extends ASTNode {
       if (this.strRaw) {
         return this.strRaw;
       }
-      let base = this.base.toString();
-      let power = this.power.toString();
+      let base = this.base.toString(true);
+      let power = this.power.toString(true);
       if (this.base.type === 'Exponent' || this.base.type === 'factor') {
         base = `(${base})`;
       }

@@ -223,20 +223,20 @@ export class FactorASTNode extends ASTNode {
       const divideList = this.child.filter(x => x.type === 'divide');
       let result;
       if (multiplyList.length === 0) {
-        result = '1 / ';
+        result = '1';
         for (let i = 0; i < divideList.length; i++) {
-          result += ` / ${divideList[i].value.toString()}`;
+          result += ` / ${divideList[i].value.toString(true)}`;
         }
         return result;
       }
   
       result = multiplyList[0].value.toString();
       for (let i = 1; i < multiplyList.length; i++) {
-        const factor = multiplyList[i].value.toString();
+        const factor = multiplyList[i].value.toString(true);
         result = `${result} * ${factor}`;
       }
       for (let i = 0; i < divideList.length; i++) {
-        const factor = divideList[i].value.toString();
+        const factor = divideList[i].value.toString(true);
         result = `${result} / ${factor}`;
       }
   

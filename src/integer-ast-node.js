@@ -15,14 +15,18 @@ export class IntegerASTNode extends ASTNode {
       ret.value = this.value ?? new BigInteger(this.obj);
       return ret;
     }
-    toString() {
+    toString(isNeededBracket) {
       if (!this.value) {
         this.value = new BigInteger(this.obj);
       }
+      let ret = this.value.toString();
+      this.obj = ret;
       if (this.value.positive === false && !this.value.isZero()) {
-        return `(${this.obj})`;
+        if (isNeededBracket) {
+          ret = `(${ret})`;
+        }
       }
-      return this.obj;
+      return ret;
     }
     clone() {
       return new IntegerASTNode(this.obj);
@@ -31,4 +35,4 @@ export class IntegerASTNode extends ASTNode {
       const result = new IntegerASTNode('0');
       return result;
     }
-}
+  }

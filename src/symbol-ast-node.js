@@ -17,6 +17,9 @@ export class SymbolASTNode extends ASTNode {
     clone() {
       return new SymbolASTNode(this.symbolName);
     }
+    getSimplify() {
+        return this;
+    }
     derivative(symbol) {
       let result;
       if (this.symbolName === symbol) {
