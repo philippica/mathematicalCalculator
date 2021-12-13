@@ -197,24 +197,28 @@ class BigInteger {
     }
     const base = BigInteger.realBase;
     const result = [];
-    for (let i = 0; i < num.rawDec.length; i++) {
-      for (let j = 0; j < this.rawDec.length; j++) {
-        if (result[i + j] === undefined) {
-          result.push(0);
-        }
-        const tempResult = result[i + j] + num.rawDec[i] * this.rawDec[j];
+    const anotherLen = num.rawDec.length;
+    const selfLen = this.rawDec.length;
+    const product = anotherLen + selfLen + 1;
+    for (let i = 1; i <= product; i++) {
+      result.push(0);
+    }
+    for (let i = 0; i < anotherLen; i++) {
+      for (let j = 0; j < selfLen; j++) {
+        let currentResult = result[i + j];
+        const tempResult = currentResult + num.rawDec[i] * this.rawDec[j];
         result[i + j] = tempResult % base;
         const carry = parseInt(tempResult / base, 10);
         if (carry) {
-          if (result[i + j + 1] === undefined) {
-            result.push(0);
-          }
           result[i + j + 1] += carry;
         }
       }
     }
     const ret = new BigInteger(result);
     ret.positive = !(this.positive ^ num.positive);
+    while (ret.rawDec[ret.rawDec.length - 1] === 0 && ret.rawDec.length > 1) {
+      ret.rawDec.pop();
+    }
     return ret;
   }
   divide(_num) {
@@ -362,7 +366,6 @@ class ASTNode {
   }
 }
 
-
 class IntegerASTNode extends ASTNode {
   constructor(value) {
     super('integer', null);
@@ -377,14 +380,18 @@ class IntegerASTNode extends ASTNode {
     ret.value = this.value ?? new BigInteger(this.obj);
     return ret;
   }
-  toString() {
+  toString(isNeededBracket) {
     if (!this.value) {
       this.value = new BigInteger(this.obj);
     }
+    let ret = this.value.toString();
+    this.obj = ret;
     if (this.value.positive === false && !this.value.isZero()) {
-      return `(${this.obj})`;
+      if (isNeededBracket) {
+        ret = `(${ret})`;
+      }
     }
-    return this.obj;
+    return ret;
   }
   clone() {
     return new IntegerASTNode(this.obj);
@@ -400,6 +407,9 @@ class SymbolASTNode extends ASTNode {
     super('symbol');
     this.symbolName = symbolName;
     this.symbols.add(symbolName);
+  }
+  getSimplify() {
+    return this;
   }
   compute() {
     const ret = this.clone();
@@ -438,14 +448,22 @@ class UnaryASTNode extends ASTNode {
   }
 
   compute() {
-    const temp = this.child.compute();
+    let temp = this.child.compute();
+    if (temp.type === 'integer') {
+      temp = temp.compute();
+      if (this.type === 'negative') {
+        temp.value.positive = !temp.value.positive;
+        temp.obj = temp.value.toString();
+      }
+      return temp;
+    }
     const ret = new UnaryASTNode(this.type, temp);
     for (const element of temp.symbols) {
       ret.symbols.add(element);
     }
     return ret.getSimplify();
   }
-  toString() {
+  toString(isNeededBracket) {
     if (this.strRaw) {
       return this.strRaw;
     }
@@ -453,7 +471,10 @@ class UnaryASTNode extends ASTNode {
     if (this.type === 'positive') {
       this.strRaw = `+${temp}`;
     } else if (this.type === 'negative') {
-      this.strRaw = `(-${temp})`;
+      this.strRaw = `-${temp}`;
+    }
+    if (isNeededBracket) {
+      return `(${this.strRaw})`;
     }
     return this.strRaw;
   }
@@ -574,20 +595,20 @@ class TermASTNode extends ASTNode {
 
     const incomputableMinusList = minusList.filter(x => x.type !== 'integer');
     const integerMinus = minusList.filter(x => x.type === 'integer').reduce((x, y) => {
-      const result = x.value.add(y.value);
+      const result = x.value.add(y.compute().value);
       const _ret = new IntegerASTNode(result.toString());
       _ret.value = result;
-      return _ret;
+      return _ret.compute();
     }, new IntegerASTNode('0').compute());
 
     integerMinus.value.positive = !integerMinus.value.positive;
 
     const incomputableAddList = addList.filter(x => x.type !== 'integer');
     const integerAdd = addList.filter(x => x.type === 'integer').reduce((x, y) => {
-      const result = x.value.add(y.value);
+      const result = x.value.add(y.compute().value);
       const _ret = new IntegerASTNode(result.toString());
       _ret.value = result;
-      return _ret;
+      return _ret.compute();
     }, integerMinus);
 
 
@@ -613,6 +634,7 @@ class TermASTNode extends ASTNode {
     });
     return ret.getSimplify();
   }
+
   toString() {
     if (this.strRaw) {
       return this.strRaw;
@@ -873,20 +895,20 @@ class FactorASTNode extends ASTNode {
     const divideList = this.child.filter(x => x.type === 'divide');
     let result;
     if (multiplyList.length === 0) {
-      result = '1 / ';
+      result = '1';
       for (let i = 0; i < divideList.length; i++) {
-        result += ` / ${divideList[i].value.toString()}`;
+        result += ` / ${divideList[i].value.toString(true)}`;
       }
       return result;
     }
 
     result = multiplyList[0].value.toString();
     for (let i = 1; i < multiplyList.length; i++) {
-      const factor = multiplyList[i].value.toString();
+      const factor = multiplyList[i].value.toString(true);
       result = `${result} * ${factor}`;
     }
     for (let i = 0; i < divideList.length; i++) {
-      const factor = divideList[i].value.toString();
+      const factor = divideList[i].value.toString(true);
       result = `${result} / ${factor}`;
     }
 
@@ -930,6 +952,11 @@ class ExponentASTNode extends ASTNode {
       let result = new BigInteger(1);
       if (power.value.positive) {
         result = this.quickPower(base.value, power.value);
+      } else {
+        const ret = new FactorASTNode();
+        result = this.quickPower(base.value, power.value.inverse());
+        ret.add('divide', new IntegerASTNode(result.toString()));
+        return ret;
       }
       return new IntegerASTNode(result.toString());
     }
@@ -947,8 +974,8 @@ class ExponentASTNode extends ASTNode {
     if (this.strRaw) {
       return this.strRaw;
     }
-    let base = this.base.toString();
-    let power = this.power.toString();
+    let base = this.base.toString(true);
+    let power = this.power.toString(true);
     if (this.base.type === 'Exponent' || this.base.type === 'factor') {
       base = `(${base})`;
     }
@@ -1203,7 +1230,7 @@ class Lexical {
       const result = this.findExpression(currentIndex + 1);
       currentIndex = result.index;
       if (this.tokens[currentIndex]?.content !== ')') {
-        throw Error('parentheses is not match');
+        throw Error('parentheses is not matched');
       }
       return new ParseResult(currentIndex + 1, 'expression', result.ast);
     }
@@ -1217,7 +1244,7 @@ class Lexical {
       const result = this.findExpression(currentIndex + 2);
       currentIndex = result.index;
       if (this.tokens[currentIndex]?.content !== ')') {
-        throw Error('parentheses is not match');
+        throw Error('parentheses is not matched');
       }
       const ast = {};
       ast.functionName = firstToken.content;
@@ -1261,6 +1288,14 @@ class Lexical {
       } else if (this.tokens[currentIndex]?.content === '/') {
         const temp = this.findFactor(currentIndex + 1);
         ast.add('divide', temp.ast);
+        currentIndex = temp.index;
+      } else if (this.tokens[currentIndex]?.content === '(') {
+        const temp = this.findFactor(currentIndex);
+        ast.add('multiply', temp.ast);
+        currentIndex = temp.index;
+      } else if (this.tokens[currentIndex]?.type === 'function' || this.tokens[currentIndex]?.type === 'symbol') {
+        const temp = this.findFactor(currentIndex);
+        ast.add('multiply', temp.ast);
         currentIndex = temp.index;
       } else {
         break;
@@ -1316,12 +1351,11 @@ class Lexical {
   }
 }
 
-
-
 const b = new Lexical();
 b.setSym('x');
 b.setSym('y');
-b.generateTokens('ln(x^5)');
+b.generateTokens('x^(-x)');
+// b.generateTokens('ln(x^3)');
 const ast2 = b.parse().ast;
 const result = ast2.compute();
 // console.info(result.derivative('x').toString());
