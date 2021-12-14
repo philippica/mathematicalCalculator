@@ -241,7 +241,10 @@ export class BigInteger {
     }
     const start = this.rawDec.length - num.rawDec.length;
     if (start < 0) {
-      return new BigInteger(0);
+      return {
+        quotient: new BigInteger(0),
+        remainder: this,
+      };
     }
     let a = new BigInteger(this.rawDec.slice(start));
     let ans = '';
@@ -274,8 +277,8 @@ export class BigInteger {
         ansDigitStr = `0${ansDigitStr}`;
       }
       ans += ansDigitStr;
-      a.rawDec.unshift(0);
       if (i > 0) {
+        a.rawDec.unshift(0);
         a.rawDec[0] = this.rawDec[i - 1];
       }
       while (a.rawDec[a.rawDec.length - 1] === 0 && a.rawDec.length > 1) {
@@ -285,7 +288,10 @@ export class BigInteger {
     }
     const retBigInteger = new BigInteger(ans);
     retBigInteger.positive = !(this.positive ^ num.positive);
-    return retBigInteger;
+    return {
+      quotient: retBigInteger,
+      remainder: a,
+    };
   }
   largerThan(_num) {
     let num = _num;
@@ -331,5 +337,19 @@ export class BigInteger {
       return false;
     }
     return true;
+  }
+  gcd(_num) {
+    let num = _num;
+    if (typeof (_num) === 'number' || typeof (_num) === 'string') {
+      num = new BigInteger(_num);
+    }
+    let a = this;
+    let b = num;
+    while (!b.isZero()) {
+      const remainder = a.divide(b).remainder;
+      a = b;
+      b = remainder;
+    }
+    return a;
   }
 }

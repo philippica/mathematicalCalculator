@@ -138,7 +138,7 @@ export class FactorASTNode extends ASTNode {
     const divideList = this.child.filter(x => x.type === 'divide').map(x => x.value.compute());
 
     const incomputableMultiplyList = multiplyList.filter(x => x.type !== 'integer');
-    const integerMultiplyList = multiplyList.filter(x => x.type === 'integer').reduce((x, y) => {
+    let integerMultiplyList = multiplyList.filter(x => x.type === 'integer').reduce((x, y) => {
       const result = x.value.multiply(y.value);
       const _ret = new IntegerASTNode(result.toString());
       _ret.value = result;
@@ -146,12 +146,18 @@ export class FactorASTNode extends ASTNode {
     }, new IntegerASTNode('1').compute());
 
     const incomputableDivideList = divideList.filter(x => x.type !== 'integer');
-    const integerDivideList = divideList.filter(x => x.type === 'integer').reduce((x, y) => {
+    let integerDivideList = divideList.filter(x => x.type === 'integer').reduce((x, y) => {
       const result = x.value.multiply(y.value);
       const _ret = new IntegerASTNode(result.toString());
       _ret.value = result;
       return _ret;
     }, new IntegerASTNode('1').compute());
+
+    const gcd = integerMultiplyList.value.gcd(integerDivideList.value);
+    if (gcd.rawDec && gcd.rawDec[0] !== 1) {
+      integerMultiplyList = new IntegerASTNode(integerMultiplyList.value.divide(gcd).quotient.toString());
+      integerDivideList = new IntegerASTNode(integerDivideList.value.divide(gcd).quotient.toString());
+    }
 
     ret.add('multiply', integerMultiplyList);
     incomputableMultiplyList.forEach((x) => {
@@ -221,6 +227,9 @@ export class FactorASTNode extends ASTNode {
   }
 
   toString() {
+    if (this.strRaw) {
+      return this.strRaw;
+    }
     const multiplyList = this.child.filter(x => x.type === 'multiply');
     const divideList = this.child.filter(x => x.type === 'divide');
     let result;

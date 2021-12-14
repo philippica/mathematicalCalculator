@@ -1,39 +1,36 @@
 <html>
     <head>
         <script src='../dist/js/index.js'></script>
+        <style>
+            #correct {
+                color: green;
+            }
+            #incorrect {
+                color: red;
+            }
+        </style>
         <script>
-            const compute = () => {
-                const expression = document.getElementById('expression').value;
+            const derivative = (expression, expectation) => {
                 const b = new mathematica.Lexical();
                 b.setSym('x');
                 b.setSym('y');
                 b.generateTokens(expression);
                 const ast2 = b.parse().ast;
-                const result = ast2.compute();
-                // console.info(result.derivative('x').toString());
-                // console.info(result.derivative('x').compute().toString());
-                const u = result.compute().toString();
-                document.getElementById('result').innerHTML = u;
-                console.info(u);
+                const result = ast2.compute().derivative('x').compute().toString();
+                if(result !== expectation) {
+                    return `<div id="incorrect">incorrect</div>test (${expression})' = ${result} , expect ${expectation}`
+                }
+                return `<div id="correct">correct</div>test (${expression})' = ${result}`;
             }
-            const derivative = () => {
-                const expression = document.getElementById('expression').value;
-                const b = new mathematica.Lexical();
-                b.setSym('x');
-                b.setSym('y');
-                b.generateTokens(expression);
-                const ast2 = b.parse().ast;
-                const result = ast2.compute();
-                const u = result.derivative('x').compute().toString();
-                document.getElementById('result').innerHTML = u;
-                console.info(u);
-            }
+            document.write(`<div>${derivative("3*sin(x) + 4*cos(x)-7*ln(x)-20*3^x", "(3 * cos(x) - 4 * sin(x) - 7 / x - 20 * 3 ^ x * ln(3))")}</div>`);
+            document.write(`<div>${derivative("-sin(x)*cos(-x)", "-(cos(x) ^ 2 - sin(x) ^ 2)")}</div>`);
+            document.write(`<div>${derivative("x/ln(x)+x*ln(x)", "10715086071862673209484250490600018105614048117055336074437503883703510511249361224931983788156958581275946729175531468251871452856923140435984577574698574803934567774824230985421074605062371141877954182153046474983581941267398767559165543946077062914571196477686542167660429831652624386837755861063624")}</div>`);
+            document.write(`<div>${derivative("(1+1*1*0*1*(-1)-(-1)*(-1))*1", "0")}</div>`);
+            document.write(`<div>${derivative("(-1)^(1)+(-2)*(+100)", "-201")}</div>`);
+            document.write(`<div>${derivative("9/3", "9/3")}</div>`);
         </script>
     </head>
     <body>
-        <textarea width="800px" height="1200px" id="expression">3*(-4)*9*sin(x)*cos(x)</textarea>
-        <button onclick="compute()">计算</button>
-        <button onclick="derivative()">求导</button>
         <div id="result"></div>
     </body>
 </html>
