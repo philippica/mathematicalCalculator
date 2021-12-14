@@ -155,6 +155,16 @@ export class TermASTNode extends ASTNode {
       if (this.strRaw) {
         return this.strRaw;
       }
+      for (let i = 0, j = 0; i < this.child.length; i++) {
+        if (this.child[i].type === 'add') {
+          if (i !== j) {
+            const temp = this.child[i];
+            this.child[i] = this.child[j];
+            this.child[j] = temp;
+          }
+          j++;
+        }
+      }
       let result = this.child[0].value.toString();
       if (this.child[0].type === 'minus') {
         result = `-${result}`;
