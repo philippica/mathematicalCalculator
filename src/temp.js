@@ -241,7 +241,10 @@ class BigInteger {
     }
     const start = this.rawDec.length - num.rawDec.length;
     if (start < 0) {
-      return new BigInteger(0);
+      return {
+        quotient: new BigInteger(0),
+        remainder: this,
+      };
     }
     let a = new BigInteger(this.rawDec.slice(start));
     let ans = '';
@@ -274,8 +277,8 @@ class BigInteger {
         ansDigitStr = `0${ansDigitStr}`;
       }
       ans += ansDigitStr;
-      a.rawDec.unshift(0);
       if (i > 0) {
+        a.rawDec.unshift(0);
         a.rawDec[0] = this.rawDec[i - 1];
       }
       while (a.rawDec[a.rawDec.length - 1] === 0 && a.rawDec.length > 1) {
@@ -285,7 +288,10 @@ class BigInteger {
     }
     const retBigInteger = new BigInteger(ans);
     retBigInteger.positive = !(this.positive ^ num.positive);
-    return retBigInteger;
+    return {
+      quotient: retBigInteger,
+      remainder: a,
+    };
   }
   largerThan(_num) {
     let num = _num;
@@ -331,6 +337,20 @@ class BigInteger {
       return false;
     }
     return true;
+  }
+  gcd(_num) {
+    let num = _num;
+    if (typeof (_num) === 'number' || typeof (_num) === 'string') {
+      num = new BigInteger(_num);
+    }
+    let a = this;
+    let b = num;
+    while (!b.isZero()) {
+      const remainder = a.divide(b).remainder;
+      a = b;
+      b = remainder;
+    }
+    return a;
   }
 }
 
@@ -639,6 +659,16 @@ class TermASTNode extends ASTNode {
     if (this.strRaw) {
       return this.strRaw;
     }
+    for (let i = 0, j = 0; i < this.child.length; i++) {
+      if (this.child[i].type === 'add') {
+        if (i !== j) {
+          const temp = this.child[i];
+          this.child[i] = this.child[j];
+          this.child[j] = temp;
+        }
+        j++;
+      }
+    }
     let result = this.child[0].value.toString();
     if (this.child[0].type === 'minus') {
       result = `-${result}`;
@@ -785,8 +815,13 @@ class FactorASTNode extends ASTNode {
         negativeCount++;
       } else if (child.value.type === 'positive') {
         child.value = child.value.child;
+      } else if (child.value.type === 'integer' && child.value.compute().value.positive === false) {
+        child.value.value.positive = true;
+        child.value.obj = child.value.value.toString();
+        negativeCount++;
       }
     });
+
     this.child = this.child?.filter((child) => {
       if (child.value.type === 'integer') {
         return child.value?.obj !== '1';
@@ -805,7 +840,7 @@ class FactorASTNode extends ASTNode {
     const divideList = this.child.filter(x => x.type === 'divide').map(x => x.value.compute());
 
     const incomputableMultiplyList = multiplyList.filter(x => x.type !== 'integer');
-    const integerMultiplyList = multiplyList.filter(x => x.type === 'integer').reduce((x, y) => {
+    let integerMultiplyList = multiplyList.filter(x => x.type === 'integer').reduce((x, y) => {
       const result = x.value.multiply(y.value);
       const _ret = new IntegerASTNode(result.toString());
       _ret.value = result;
@@ -813,12 +848,18 @@ class FactorASTNode extends ASTNode {
     }, new IntegerASTNode('1').compute());
 
     const incomputableDivideList = divideList.filter(x => x.type !== 'integer');
-    const integerDivideList = divideList.filter(x => x.type === 'integer').reduce((x, y) => {
+    let integerDivideList = divideList.filter(x => x.type === 'integer').reduce((x, y) => {
       const result = x.value.multiply(y.value);
       const _ret = new IntegerASTNode(result.toString());
       _ret.value = result;
       return _ret;
     }, new IntegerASTNode('1').compute());
+
+    const gcd = integerMultiplyList.value.gcd(integerDivideList.value);
+    if (gcd.rawDec && gcd.rawDec[0] !== 1) {
+      integerMultiplyList = new IntegerASTNode(integerMultiplyList.value.divide(gcd).quotient.toString());
+      integerDivideList = new IntegerASTNode(integerDivideList.value.divide(gcd).quotient.toString());
+    }
 
     ret.add('multiply', integerMultiplyList);
     incomputableMultiplyList.forEach((x) => {
@@ -902,7 +943,7 @@ class FactorASTNode extends ASTNode {
       return result;
     }
 
-    result = multiplyList[0].value.toString();
+    result = multiplyList[0].value.toString(true);
     for (let i = 1; i < multiplyList.length; i++) {
       const factor = multiplyList[i].value.toString(true);
       result = `${result} * ${factor}`;
@@ -942,7 +983,7 @@ class ExponentASTNode extends ASTNode {
     if (power.rawDec[0] & 1) {
       return base.multiply(this.quickPower(base, power.minus(1)));
     }
-    const temp = this.quickPower(base, power.divide(2));
+    const temp = this.quickPower(base, power.divide(2).remainder);
     return temp.multiply(temp);
   }
   compute() {
