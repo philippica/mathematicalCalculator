@@ -30,7 +30,7 @@ export class ExponentASTNode extends ASTNode {
     if (power.rawDec[0] & 1) {
       return base.multiply(this.quickPower(base, power.minus(1)));
     }
-    const temp = this.quickPower(base, power.divide(2).remainder);
+    const temp = this.quickPower(base, power.divide(2).quotient);
     return temp.multiply(temp);
   }
   compute() {

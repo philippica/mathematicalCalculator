@@ -5,7 +5,6 @@ class BigInteger {
   static realBase = this._base ** this.compressDegree;
   constructor(num) {
     this.rawDec = [];
-    this.decimal = [];
     this.positive = true;
     if (num) {
       this.parse(num);
@@ -43,8 +42,9 @@ class BigInteger {
         break;
       }
     }
-
     const numStr = [trimLeadingZeroNum.slice(0, i)];
+    trimLeadingZeroNum.split(".").join("")
+
     this.rawDec = [];
     let numIndex = numStr[0].length - 1;
     let rawDecIndex = 0;
@@ -477,6 +477,18 @@ class UnaryASTNode extends ASTNode {
       }
       return temp;
     }
+    if (temp.type === 'term') {
+      if (this.type === 'negative') {
+        temp.child.forEach((child) => {
+          if (child.type === 'add') {
+            child.type = 'minus';
+          } else {
+            child.type = 'add';
+          }
+        });
+      }
+      return temp;
+    }
     const ret = new UnaryASTNode(this.type, temp);
     for (const element of temp.symbols) {
       ret.symbols.add(element);
@@ -487,7 +499,7 @@ class UnaryASTNode extends ASTNode {
     if (this.strRaw) {
       return this.strRaw;
     }
-    const temp = this.child.toString();
+    const temp = this.child.toString(true);
     if (this.type === 'positive') {
       this.strRaw = `+${temp}`;
     } else if (this.type === 'negative') {
@@ -655,8 +667,11 @@ class TermASTNode extends ASTNode {
     return ret.getSimplify();
   }
 
-  toString() {
+  toString(isNeededBracket) {
     if (this.strRaw) {
+      if (isNeededBracket) {
+        return `(${this.strRaw})`;
+      }
       return this.strRaw;
     }
     for (let i = 0, j = 0; i < this.child.length; i++) {
@@ -686,7 +701,10 @@ class TermASTNode extends ASTNode {
           break;
       }
     }
-    this.strRaw = `(${result})`;
+    this.strRaw = result;
+    if (isNeededBracket) {
+      return `(${result})`;
+    }
     return this.strRaw;
   }
   clone() {
@@ -983,7 +1001,7 @@ class ExponentASTNode extends ASTNode {
     if (power.rawDec[0] & 1) {
       return base.multiply(this.quickPower(base, power.minus(1)));
     }
-    const temp = this.quickPower(base, power.divide(2).remainder);
+    const temp = this.quickPower(base, power.divide(2).quotient);
     return temp.multiply(temp);
   }
   compute() {
@@ -1105,7 +1123,7 @@ class FunctionASTNode extends ASTNode {
   }
   toString() {
     let ret;
-    if (this.parameter.type === 'term' || this.parameter.type === 'negative') {
+    if (this.parameter.type === 'negative') {
       ret = `${this.functionName}${this.parameter.toString()}`;
     } else {
       ret = `${this.functionName}(${this.parameter.toString()})`;
@@ -1222,7 +1240,7 @@ class Lexical {
   }
 
   receiveIntegerProcess(charactor) {
-    if (/^[0-9]$/.test(charactor)) {
+    if (/^[0-9\.]$/.test(charactor)) {
       const latestToken = this.tokens.pop();
       latestToken.content += charactor;
       this.tokens.push(latestToken);
