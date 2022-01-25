@@ -519,7 +519,6 @@ class UnaryASTNode extends ASTNode {
   }
 }
 
-
 class TermASTNode extends ASTNode {
   constructor(value) {
     super('term', []);
@@ -537,7 +536,7 @@ class TermASTNode extends ASTNode {
       let countOfElement = 1;
       let str = term.value.toString();
       if(term.value.type === 'factor') {
-        const coefficient = term.value.child.filter((x) => x.value.type === 'integer');
+        const coefficient = term.value.child.filter((x) => x.value.type === 'integer' && x.type === 'multiply');
         if(coefficient.length === 1) {
           const other = term.value.withoutCoefficient();
           str = other.toString();
@@ -565,7 +564,7 @@ class TermASTNode extends ASTNode {
       let str = term.value.toString();
       let currentTerm = term.value;
       if(term.value.type === 'factor') {
-        const coefficient = term.value.child.filter((x) => x.value.type === 'integer');
+        const coefficient = term.value.child.filter((x) => x.value.type === 'integer' && x.type === 'multiply');
         if(coefficient.length === 1) {
           const other = term.value.withoutCoefficient();
           str = other.toString();
@@ -1493,11 +1492,11 @@ const b = new Lexical();
 b.setSym('x');
 b.setSym('y');
 ASTNode.isExpandFactor = true;
-b.generateTokens('3*(x^2+1)*(x+1)*(x-1)*(3*x*x+5*x)');
+b.generateTokens('x/4');
 // b.generateTokens('ln(x^3)');
 const ast2 = b.parse().ast;
 const result = ast2.compute();
 // console.info(result.derivative('x').toString());
 // console.info(result.derivative('x').compute().toString());
-const u = result.derivative('x').compute().toString();
+const u = result.toString();
 console.info(u);
