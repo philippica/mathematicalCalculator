@@ -70,7 +70,19 @@ export class FactorASTNode extends ASTNode {
     this.child = newChild;
   }
 
-  getSimplify() {
+  withoutCoefficient() {
+    const ret = new FactorASTNode();
+    for(let i = 0; i < this.child.length; i++){
+      const term = this.child[i];
+      if(term.value.type === 'integer' && term.type === 'multiply') {
+        continue;
+      }
+      ret.add(term.type, term.value);
+    }
+    return ret;
+  }
+
+  getRidOfNestedFactor() {
     const factorChild = this.child?.filter(child => child.value.type === 'factor' && child.type === 'multiply');
     this.child = this.child?.filter(child => child.value.type !== 'factor' || child.type !== 'multiply');
 
@@ -79,6 +91,11 @@ export class FactorASTNode extends ASTNode {
         this.child.push(child);
       });
     });
+  }
+
+  getSimplify() {
+    this.getRidOfNestedFactor();
+
     this.child = this.child?.filter((child) => {
       if (child.value.type === 'integer') {
         return child.value?.obj !== '1';
@@ -129,10 +146,50 @@ export class FactorASTNode extends ASTNode {
     if (negativeCount & 1) {
       return new UnaryASTNode('negative', this);
     }
-
     return this;
   }
+  expand(firstTerm, secondTerm) {
+    const ret = new TermASTNode();
+    firstTerm.child.forEach((firstElement) => {
+      secondTerm.child.forEach((secondElement) => {
+        const element = new FactorASTNode();
+        element.add("multiply", firstElement.value);
+        element.add("multiply", secondElement.value);
+        ret.add(firstElement.type === secondElement.type ? 'add':'minus', element.compute());
+      })
+    });
+    return ret;
+  }
   compute() {
+    this.getRidOfNestedFactor();
+    if(ASTNode.isExpandFactor) {
+      const factorList = [];
+      const other = new FactorASTNode();
+      for(let i = 0; i < this.child.length; i++) {
+        if(this.child[i].type === 'multiply' && this.child[i].value.type === 'term') {
+          factorList.push(this.child[i].value.compute());
+        } else {
+          other.child.push(this.child[i]);
+        }
+      }
+      
+      const otherList = this.child.filter(x => x.type !== 'multiply' || x.value.type !== 'term');
+      if(factorList.length !== 0) {
+
+        const ret = new TermASTNode();
+        for(let i = 1; i < factorList.length; i++) {
+          factorList[0] = this.expand(factorList[0], factorList[i]);
+        }
+
+        factorList[0].child.forEach((x) => {
+          const element = new FactorASTNode();
+          element.add("multiply", x.value);
+          element.add("multiply", other);
+          ret.add(x.type, element.compute());
+        })
+        return ret.compute();
+      }
+    }
     const ret = new FactorASTNode();
     const multiplyList = this.child.filter(x => x.type === 'multiply').map(x => x.value.compute());
     const divideList = this.child.filter(x => x.type === 'divide').map(x => x.value.compute());
