@@ -378,6 +378,7 @@ class ParseResult {
 }
 
 class ASTNode {
+  static isExpandFactor = false;
   constructor(type, childNode, value) {
     this.symbols = new Set();
     this.child = childNode;
@@ -533,26 +534,44 @@ class TermASTNode extends ASTNode {
   combine() {
     const childStrMap = new Map();
     this.child.forEach((term) => {
-      const str = term.value.toString();
+      let countOfElement = 1;
+      let str = term.value.toString();
+      if(term.value.type === 'factor') {
+        const coefficient = term.value.child.filter((x) => x.value.type === 'integer');
+        if(coefficient.length === 1) {
+          const other = term.value.withoutCoefficient();
+          str = other.toString();
+          countOfElement = parseInt(coefficient[0].value.obj);
+        }
+      }
       const count = childStrMap.get(str);
       if (count) {
-        childStrMap.set(str, count + 1);
+        childStrMap.set(str, count + countOfElement);
         if (term.type === 'add') {
-          childStrMap.set(str, count + 1);
+          childStrMap.set(str, count + countOfElement);
         } else {
-          childStrMap.set(str, count - 1);
+          childStrMap.set(str, count - countOfElement);
         }
       } else {
         if (term.type === 'add') {
-          childStrMap.set(str, 1);
+          childStrMap.set(str, countOfElement);
         } else {
-          childStrMap.set(str, -1);
+          childStrMap.set(str, -countOfElement);
         }
       }
     });
     const newChild = [];
     this.child.forEach((term) => {
-      const str = term.value.toString();
+      let str = term.value.toString();
+      let currentTerm = term.value;
+      if(term.value.type === 'factor') {
+        const coefficient = term.value.child.filter((x) => x.value.type === 'integer');
+        if(coefficient.length === 1) {
+          const other = term.value.withoutCoefficient();
+          str = other.toString();
+          currentTerm = other;
+        }
+      }
       const count = childStrMap.get(str);
       if (count === 0) {
         return;
@@ -566,7 +585,7 @@ class TermASTNode extends ASTNode {
       } else {
         const result = new FactorASTNode();
         result.add('multiply', new IntegerASTNode(count.toString()));
-        result.add('multiply', term.value);
+        result.add('multiply', currentTerm);
         term.value = result;
         term.type = 'add';
         newChild.push(term);
@@ -790,7 +809,19 @@ class FactorASTNode extends ASTNode {
     this.child = newChild;
   }
 
-  getSimplify() {
+  withoutCoefficient() {
+    const ret = new FactorASTNode();
+    for(let i = 0; i < this.child.length; i++){
+      const term = this.child[i];
+      if(term.value.type === 'integer') {
+        continue;
+      }
+      ret.add(term.type, term.value);
+    }
+    return ret;
+  }
+
+  getRidOfNestedFactor() {
     const factorChild = this.child?.filter(child => child.value.type === 'factor' && child.type === 'multiply');
     this.child = this.child?.filter(child => child.value.type !== 'factor' || child.type !== 'multiply');
 
@@ -799,6 +830,11 @@ class FactorASTNode extends ASTNode {
         this.child.push(child);
       });
     });
+  }
+
+  getSimplify() {
+    this.getRidOfNestedFactor();
+
     this.child = this.child?.filter((child) => {
       if (child.value.type === 'integer') {
         return child.value?.obj !== '1';
@@ -849,10 +885,50 @@ class FactorASTNode extends ASTNode {
     if (negativeCount & 1) {
       return new UnaryASTNode('negative', this);
     }
-
     return this;
   }
+  expand(firstTerm, secondTerm) {
+    const ret = new TermASTNode();
+    firstTerm.child.forEach((firstElement) => {
+      secondTerm.child.forEach((secondElement) => {
+        const element = new FactorASTNode();
+        element.add("multiply", firstElement.value);
+        element.add("multiply", secondElement.value);
+        ret.add(firstElement.type === secondElement.type ? 'add':'minus', element.compute());
+      })
+    });
+    return ret;
+  }
   compute() {
+    this.getRidOfNestedFactor();
+    if(ASTNode.isExpandFactor) {
+      const factorList = [];
+      const other = new FactorASTNode();
+      for(let i = 0; i < this.child.length; i++) {
+        if(this.child[i].type === 'multiply' && this.child[i].value.type === 'term') {
+          factorList.push(this.child[i].value.compute());
+        } else {
+          other.child.push(this.child[i]);
+        }
+      }
+      
+      const otherList = this.child.filter(x => x.type !== 'multiply' || x.value.type !== 'term');
+      if(factorList.length !== 0) {
+
+        const ret = new TermASTNode();
+        for(let i = 1; i < factorList.length; i++) {
+          factorList[0] = this.expand(factorList[0], factorList[i]);
+        }
+
+        factorList[0].child.forEach((x) => {
+          const element = new FactorASTNode();
+          element.add("multiply", x.value);
+          element.add("multiply", other);
+          ret.add(x.type, element.compute());
+        })
+        return ret.compute();
+      }
+    }
     const ret = new FactorASTNode();
     const multiplyList = this.child.filter(x => x.type === 'multiply').map(x => x.value.compute());
     const divideList = this.child.filter(x => x.type === 'divide').map(x => x.value.compute());
@@ -1161,6 +1237,9 @@ class FunctionASTNode extends ASTNode {
     ret.add('multiply', this.parameter.derivative(symbol));
     return ret;
   }
+  integral(symbol) {
+
+  }
 }
 
 
@@ -1413,7 +1492,8 @@ class Lexical {
 const b = new Lexical();
 b.setSym('x');
 b.setSym('y');
-b.generateTokens('x^(-x)');
+ASTNode.isExpandFactor = true;
+b.generateTokens('3*(x^2+1)*(x+1)*(x-1)*(3*x*x+5*x)');
 // b.generateTokens('ln(x^3)');
 const ast2 = b.parse().ast;
 const result = ast2.compute();
