@@ -419,7 +419,7 @@ class IntegerASTNode extends ASTNode {
   }
   derivative() {
     const result = new IntegerASTNode('0');
-    return result;
+    return result.compute();
   }
 }
 
@@ -449,7 +449,7 @@ class SymbolASTNode extends ASTNode {
     } else {
       result = new IntegerASTNode('0');
     }
-    return result;
+    return result.compute();
   }
 }
 
@@ -515,7 +515,7 @@ class UnaryASTNode extends ASTNode {
     return new UnaryASTNode(this.type, this.child.clone());
   }
   derivative(symbol) {
-    return new UnaryASTNode(this.type, this.child.derivative(symbol));
+    return new UnaryASTNode(this.type, this.child.derivative(symbol)).compute();
   }
 }
 
@@ -569,6 +569,7 @@ class TermASTNode extends ASTNode {
           const other = term.value.withoutCoefficient();
           str = other.toString();
           currentTerm = other;
+          term.value = other;
         }
       }
       const count = childStrMap.get(str);
@@ -812,7 +813,7 @@ class FactorASTNode extends ASTNode {
     const ret = new FactorASTNode();
     for(let i = 0; i < this.child.length; i++){
       const term = this.child[i];
-      if(term.value.type === 'integer') {
+      if(term.value.type === 'integer' && term.type === 'multiply') {
         continue;
       }
       ret.add(term.type, term.value);
@@ -1092,7 +1093,7 @@ class ExponentASTNode extends ASTNode {
         ret.add('divide', new IntegerASTNode(result.toString()));
         return ret;
       }
-      return new IntegerASTNode(result.toString());
+      return new IntegerASTNode(result.toString()).compute();
     }
     const ret = new ExponentASTNode(base, power).getSimplify();
     for (const element of base.symbols) {
@@ -1234,7 +1235,7 @@ class FunctionASTNode extends ASTNode {
     const rightPart = this.functionDerivativeProcess(this.clone());
     const ret = new FactorASTNode(rightPart);
     ret.add('multiply', this.parameter.derivative(symbol));
-    return ret;
+    return ret.compute();
   }
   integral(symbol) {
 
@@ -1491,12 +1492,14 @@ class Lexical {
 const b = new Lexical();
 b.setSym('x');
 b.setSym('y');
-ASTNode.isExpandFactor = true;
-b.generateTokens('x/4');
+ASTNode.isExpandFactor = false;
+b.generateTokens('x/ln(x)+x*ln(x)');
 // b.generateTokens('ln(x^3)');
 const ast2 = b.parse().ast;
 const result = ast2.compute();
 // console.info(result.derivative('x').toString());
 // console.info(result.derivative('x').compute().toString());
-const u = result.toString();
+//const u = result.toString();
+const u = result.derivative('x').toString();
 console.info(u);
+
