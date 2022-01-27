@@ -22,12 +22,12 @@
                 }
                 return `<div id="correct">correct</div>test (${expression})' = ${result}`;
             }
-            document.write(`<div>${derivative("3*sin(x) + 4*cos(x)-7*ln(x)-20*3^x", "(3 * cos(x) - 4 * sin(x) - 7 / x - 20 * 3 ^ x * ln(3))")}</div>`);
-            document.write(`<div>${derivative("-sin(x)*cos(-x)", "-(cos(x) ^ 2 - sin(x) ^ 2)")}</div>`);
-            document.write(`<div>${derivative("x/ln(x)+x*ln(x)", "")}</div>`);
+            document.write(`<div>${derivative("3*sin(x) + 4*cos(x)-7*ln(x)-20*3^x", "3 * cos(x) - 4 * sin(x) - 7 / x - 20 * 3 ^ x * ln(3)")}</div>`);
+            document.write(`<div>${derivative("-sin(x)*cos(-x)", "sin(x) ^ 2 - cos(x) ^ 2")}</div>`);
+            document.write(`<div>${derivative("x/ln(x)+x*ln(x)", "1 + (ln(x) - 1) * ln(x) ^ (-2) + ln(x)")}</div>`);
             document.write(`<div>${derivative("(1+1*1*0*1*(-1)-(-1)*(-1))*1", "0")}</div>`);
-            document.write(`<div>${derivative("(-1)^(1)+(-2)*(+100)", "-201")}</div>`);
-            document.write(`<div>${derivative("9/3", "9/3")}</div>`);
+            document.write(`<div>${derivative("(-1)^(1)+(-2)*(+100)", "0")}</div>`);
+            document.write(`<div>${derivative("9/3", "0")}</div>`);
         </script>
     </head>
     <body>

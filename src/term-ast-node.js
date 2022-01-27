@@ -53,6 +53,7 @@ export class TermASTNode extends ASTNode {
           const other = term.value.withoutCoefficient();
           str = other.toString();
           currentTerm = other;
+          term.value = other;
         }
       }
       const count = childStrMap.get(str);

@@ -46,7 +46,7 @@ export class ExponentASTNode extends ASTNode {
         ret.add('divide', new IntegerASTNode(result.toString()));
         return ret;
       }
-      return new IntegerASTNode(result.toString());
+      return new IntegerASTNode(result.toString()).compute();
     }
     const ret = new ExponentASTNode(base, power).getSimplify();
     for (const element of base.symbols) {
