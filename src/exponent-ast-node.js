@@ -48,6 +48,14 @@ export class ExponentASTNode extends ASTNode {
       }
       return new IntegerASTNode(result.toString()).compute();
     }
+    if(base.type === 'factor') {
+      const result = new FactorASTNode();
+      for (const element of base.child) {
+        const pow = new ExponentASTNode(element.value, power);
+        result.add(element.type, pow);
+      }
+      return result.compute();
+    }
     const ret = new ExponentASTNode(base, power).getSimplify();
     for (const element of base.symbols) {
       ret.symbols.add(element);
@@ -86,6 +94,7 @@ export class ExponentASTNode extends ASTNode {
       const minusOne = new TermASTNode(this.power.clone());
       minusOne.add('minus', new IntegerASTNode('1'));
       result.add('multiply', new ExponentASTNode(this.base, minusOne));
+      result.add('multiply', this.base.clone().derivative('x').compute());
       return result;
     }
     if (!this.base.symbols.has(symbol)) {
